@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Light Theme to match reference image */
+    --background: 0 0% 98%;
+    --foreground: 222 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 84% 4.9%;
+
+    /* Blue Primary */
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 221 83% 63%;
+
+    /* Light Secondary */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 84% 4.9%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Purple Accent */
+    --accent: 271 76% 53%;
+    --accent-foreground: 210 40% 98%;
+    --accent-glow: 271 76% 65%;
+
+    /* Status Colors */
+    --success: 142 76% 36%;
+    --success-foreground: 355 100% 97%;
+    --success-glow: 142 76% 50%;
+
+    --warning: 25 95% 53%;
+    --warning-foreground: 210 40% 98%;
+    --warning-glow: 25 95% 63%;
+
+    --info: 221 83% 53%;
+    --info-foreground: 210 40% 98%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --destructive-glow: 0 84% 75%;
+
+    /* Interface Elements */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.75rem;
+
+    /* Custom Dashboard Variables */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    --gradient-light: linear-gradient(135deg, hsl(var(--background)), hsl(var(--card)));
+    --shadow-glow: 0 0 20px hsl(var(--primary) / 0.1);
+    --shadow-glow-accent: 0 0 20px hsl(var(--accent) / 0.1);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Sidebar Variables */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 84% 4.9%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 84% 4.9%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 221 83% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}

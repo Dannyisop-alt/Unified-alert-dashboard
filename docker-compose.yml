@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./oci-alert-backend
+    container_name: oci-alert-dashboard-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - "C:/Users/Vaibhav Malhotra/.oci:/root/.oci:ro"
+    restart: always
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./alert-frontend
+    container_name: oci-alert-dashboard-frontend
+    ports:
+      - "3000:80"
+    restart: always
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
