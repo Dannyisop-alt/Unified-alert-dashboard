@@ -1,4 +1,5 @@
 import type { GraylogAlert, OCIAlert } from '@/types/alerts';
+import { getToken } from '@/lib/auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -11,7 +12,7 @@ export const api = {
     
     const response = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Authorization': `Bearer ${getToken() || ''}`,
         'Content-Type': 'application/json'
       }
     });
@@ -38,7 +39,7 @@ export const api = {
     
     const response = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Authorization': `Bearer ${getToken() || ''}`,
         'Content-Type': 'application/json'
       }
     });
@@ -85,7 +86,10 @@ export const api = {
   async triggerOCIAlertPull(): Promise<{ message: string; newAlerts: any[] }> {
     const response = await fetch(`${API_BASE_URL}/oci-alerts/pull`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken() || ''}`,
+      }
     });
     if (!response.ok) throw new Error('Failed to trigger OCI alert pull');
     return response.json();

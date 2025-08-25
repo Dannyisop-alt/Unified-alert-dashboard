@@ -2,6 +2,7 @@ import { Server, FileText, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { AlertCategory } from '@/types/alerts';
+import { getAccess } from '@/lib/auth';
 
 interface CategoryToggleProps {
   selectedCategory: AlertCategory;
@@ -39,11 +40,20 @@ export const CategoryToggle = ({
     }
   ];
 
+  const access = getAccess();
+  const allowed = new Set(access);
+
   return (
     <div className="border-b border-border bg-card/30 backdrop-blur">
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center gap-2">
-          {categories.map((category) => {
+          {categories
+            .filter((c) =>
+              (c.label === 'Application Heartbeat' && allowed.has('Application Heartbeat')) ||
+              (c.label === 'Application Logs' && allowed.has('Application Logs')) ||
+              (c.label === 'Infrastructure Alerts' && allowed.has('Infrastructure Alerts'))
+            )
+            .map((category) => {
             const Icon = category.icon;
             return (
               <Button
