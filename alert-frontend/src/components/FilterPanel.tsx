@@ -29,22 +29,39 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
 
   const extractSystemsFromHeartbeat = () => {
     const systems = new Set<string>();
-    heartbeatAlerts.forEach(alert => {
-      if (alert.service) {
-        systems.add(alert.service);
+    
+    // Always add base categories
+    systems.add('DB');
+    systems.add('MT SERVER'); 
+    systems.add('WEB');
+    
+    // Check if we have services with specific endings and add the corresponding filters
+    const hasDBSPC = heartbeatAlerts.some(alert => alert.service?.endsWith('_DBSPC'));
+    const hasAAL = heartbeatAlerts.some(alert => alert.service?.endsWith('_aal'));
+    const hasGSE = heartbeatAlerts.some(alert => alert.service?.endsWith('-gse'));
+    
+    if (hasDBSPC) systems.add('DBSPC');
+    if (hasAAL) systems.add('aal');
+    if (hasGSE) systems.add('gse');
+    
+    return Array.from(systems).sort();
+  };
+
+  const extractTenantsFromOCI = () => {
+    const tenants = new Set<string>();
+    ociAlerts.forEach(alert => {
+      if (alert.tenant && alert.tenant !== 'Unknown Tenant') {
+        tenants.add(alert.tenant);
       }
     });
-    return Array.from(systems).sort();
+    return Array.from(tenants).sort();
   };
 
   const extractVMsFromOCI = () => {
     const vms = new Set<string>();
     ociAlerts.forEach(alert => {
-      if (alert.vm) {
+      if (alert.vm && alert.vm !== 'N/A' && alert.vm !== 'Processing Error') {
         vms.add(alert.vm);
-      }
-      if (alert.tenant) {
-        vms.add(alert.tenant);
       }
     });
     return Array.from(vms).sort();
@@ -86,8 +103,14 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
         const heartbeatSystems = extractSystemsFromHeartbeat();
         return ['ALL', ...heartbeatSystems];
       case 'infrastructure':
-        const infraVMs = extractVMsFromOCI();
-        return ['ALL', ...infraVMs];
+        const tenants = extractTenantsFromOCI();
+        // Only show tenants if we have more than 3, otherwise show VMs
+        if (tenants.length > 3) {
+          return ['ALL', ...tenants];
+        } else {
+          const vms = extractVMsFromOCI();
+          return ['ALL', ...vms.slice(0, 10)]; // Limit to 10 most common VMs
+        }
       default:
         return ['ALL'];
     }

@@ -67,26 +67,6 @@ export const api = {
     return response.json();
   },
 
-  // Mark alert as acknowledged
-  async markGraylogAlertAsAcknowledged(id: string, acknowledged: boolean): Promise<GraylogAlert> {
-    const response = await fetch(`${API_BASE_URL}/graylog-alerts/${id}/acknowledge`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ acknowledged })
-    });
-    if (!response.ok) throw new Error('Failed to acknowledge Graylog alert');
-    return response.json();
-  },
-
-  async markOCIAlertAsAcknowledged(id: string, acknowledged: boolean): Promise<OCIAlert> {
-    const response = await fetch(`${API_BASE_URL}/oci-alerts/${id}/acknowledge`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ acknowledged })
-    });
-    if (!response.ok) throw new Error('Failed to acknowledge OCI alert');
-    return response.json();
-  },
 
   // Get filter options for OCI alerts
   async getOCIFilterOptions(): Promise<{
@@ -98,6 +78,16 @@ export const api = {
   }> {
     const response = await fetch(`${API_BASE_URL}/oci-alerts/filters`);
     if (!response.ok) throw new Error('Failed to fetch filter options');
+    return response.json();
+  },
+
+  // Trigger fresh OCI alert pull
+  async triggerOCIAlertPull(): Promise<{ message: string; newAlerts: any[] }> {
+    const response = await fetch(`${API_BASE_URL}/oci-alerts/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to trigger OCI alert pull');
     return response.json();
   }
 };

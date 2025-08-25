@@ -9,7 +9,6 @@ export interface GraylogAlert {
   iconEmoji?: string;
   timestamp: string;
   read?: boolean;
-  acknowledged?: boolean;
 }
 
 export interface OCIAlert {
@@ -27,7 +26,6 @@ export interface OCIAlert {
   unit?: string;
   timestamp: string;
   read?: boolean;
-  acknowledged?: boolean;
 }
 
 export interface AlertFilters {
@@ -59,7 +57,7 @@ export interface ProcessedAlert {
     status: 'OK' | 'ERR' | 'WARN';
   }[];
   category: AlertCategory;
-  acknowledged?: boolean;
+  
   // OCI-specific fields
   region?: string;
   compartment?: string;

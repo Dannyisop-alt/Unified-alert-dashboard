@@ -11,9 +11,10 @@ interface MonitoringDashboardProps {
   selectedCategory: AlertCategory;
   filters: AlertFilters;
   onFiltersChange: (filters: AlertFilters) => void;
+  onRefresh?: () => void;
 }
 
-export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange }: MonitoringDashboardProps) => {
+export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange, onRefresh }: MonitoringDashboardProps) => {
   const [graylogAlerts, setGraylogAlerts] = useState<GraylogAlert[]>([]);
   const [ociAlerts, setOCIAlerts] = useState<OCIAlert[]>([]);
   const [heartbeatAlerts, setHeartbeatAlerts] = useState<HeartbeatAlert[]>([]);
@@ -81,6 +82,13 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
       setLoading(false);
     }
   };
+
+  // Expose fetchAlerts for parent component to call
+  useEffect(() => {
+    if (onRefresh) {
+      (window as any).refreshAlerts = fetchAlerts;
+    }
+  }, [onRefresh]);
 
   useEffect(() => {
     fetchAlerts();

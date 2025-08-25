@@ -33,7 +33,6 @@ export const processAlerts = (
       title: alert.shortMessage || 'No title',
       description: alert.fullMessage || alert.shortMessage || 'No description',
       timestamp: alert.timestamp,
-      acknowledged: alert.acknowledged || false,
       category
     });
   });
@@ -55,7 +54,7 @@ export const processAlerts = (
       description: alert.message || 'No description available',
       timestamp: alert.timestamp,
       site: alert.vm,
-      acknowledged: alert.acknowledged || false,
+      
       category: 'infrastructure',
       region: alert.region,
       compartment: alert.compartment,
@@ -81,7 +80,7 @@ export const processAlerts = (
       description: alert.message,
       timestamp: alert.timestamp,
       site: alert.site,
-      acknowledged: false, // Heartbeat alerts don't support acknowledgment currently
+      
       services: [{
         name: alert.service,
         status: alert.status === 'GREEN' ? 'OK' : alert.status === 'ORANGE' ? 'WARN' : 'ERR'
@@ -134,21 +133,60 @@ export const processAlerts = (
         }
       }
       
-      // For OCI/infrastructure alerts
+      // For OCI/infrastructure alerts - prioritize tenant filtering
       if (alert.source === 'Infrastructure Alerts') {
         const ociAlert = ociAlerts.find(o => o.timestamp === alert.timestamp);
         if (ociAlert) {
-          return ociAlert.vm?.toLowerCase().includes(filterValue.toLowerCase()) ||
-                 ociAlert.tenant?.toLowerCase().includes(filterValue.toLowerCase()) ||
-                 ociAlert.region?.toLowerCase().includes(filterValue.toLowerCase());
+          // First check if filter matches tenant (most common case)
+          if (ociAlert.tenant?.toLowerCase() === filterValue.toLowerCase()) {
+            return true;
+          }
+          // Then check VM name for more specific filtering
+          if (ociAlert.vm?.toLowerCase().includes(filterValue.toLowerCase())) {
+            return true;
+          }
+          return false;
         }
       }
       
       // For heartbeat alerts
       if (alert.source === 'Application Heartbeat') {
         const heartbeatAlert = heartbeatAlerts.find(h => h.id === alert.id);
-        if (heartbeatAlert) {
-          return heartbeatAlert.service?.toLowerCase() === filterValue.toLowerCase();
+        if (heartbeatAlert && heartbeatAlert.service) {
+          const serviceName = heartbeatAlert.service;
+          
+          // Handle specific ending patterns
+          if (filterValue === 'DBSPC') {
+            return serviceName.endsWith('_DBSPC');
+          }
+          if (filterValue === 'aal') {
+            return serviceName.endsWith('_aal');
+          }
+          if (filterValue === 'gse') {
+            return serviceName.endsWith('-gse');
+          }
+          
+          // Handle existing filters
+          if (filterValue === 'DB') {
+            return serviceName.toLowerCase().includes('db') && 
+                   !serviceName.endsWith('_DBSPC');
+          }
+          if (filterValue === 'MT SERVER') {
+            return (serviceName.toLowerCase().includes('mt') || 
+                    serviceName.toLowerCase().includes('server')) &&
+                   !serviceName.endsWith('_aal') && 
+                   !serviceName.endsWith('-gse') && 
+                   !serviceName.endsWith('_DBSPC');
+          }
+          if (filterValue === 'WEB') {
+            return serviceName.toLowerCase().includes('web') &&
+                   !serviceName.endsWith('_aal') && 
+                   !serviceName.endsWith('-gse') && 
+                   !serviceName.endsWith('_DBSPC');
+          }
+          
+          // Exact match for other values
+          return serviceName.toLowerCase() === filterValue.toLowerCase();
         }
       }
       

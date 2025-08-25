@@ -124,11 +124,18 @@ const Index = () => {
     infrastructure: infrastructureCriticalCount  // Real critical alerts count from infrastructure
   };
 
+  const handleRefresh = () => {
+    // Trigger refresh of the monitoring dashboard
+    if ((window as any).refreshAlerts) {
+      (window as any).refreshAlerts();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="relative">
         {/* Header */}
-        <DashboardHeader />
+        <DashboardHeader onRefresh={handleRefresh} />
         
         {/* Category Toggle */}
         <CategoryToggle 
@@ -139,7 +146,12 @@ const Index = () => {
         
         {/* Main Content */}
         <main className="container mx-auto px-6 py-6">
-          <MonitoringDashboard selectedCategory={selectedCategory} filters={filters} onFiltersChange={setFilters} />
+          <MonitoringDashboard 
+            selectedCategory={selectedCategory} 
+            filters={filters} 
+            onFiltersChange={setFilters}
+            onRefresh={handleRefresh}
+          />
         </main>
       </div>
     </div>
