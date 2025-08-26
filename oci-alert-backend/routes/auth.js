@@ -6,6 +6,8 @@ const { authenticateJWT, requireAdmin } = require('../utils/authMiddleware');
 const router = express.Router();
 
 const PASSWORD_REGEX = /^(?=(?:.*[A-Z]){2,})(?=(?:.*[a-z]){2,})(?=(?:.*\d){2,})(?=(?:.*[^A-Za-z\d]){2,}).{12,}$/;
+// Disallow these substrings in any casing
+const PASSWORD_BLACKLIST = ['hbss', 'qyryde'];
 const VALID_ACCESS = new Set([
   'Infrastructure Alerts',
   'Application Logs',
@@ -82,6 +84,12 @@ router.post('/admin/create-user', authenticateJWT, requireAdmin, async (req, res
       return res.status(400).json({ error: 'email, password, and access are required' });
     }
 
+    // Validate password strength and blacklist
+    const lower = String(password || '').toLowerCase();
+    const containsBlacklisted = PASSWORD_BLACKLIST.some((w) => lower.includes(w));
+    if (containsBlacklisted) {
+      return res.status(400).json({ error: 'hbss,qyryde not allowed in password' });
+    }
     if (!PASSWORD_REGEX.test(password)) {
       return res.status(400).json({
         error: 'Password does not meet complexity requirements',
@@ -149,6 +157,13 @@ router.put('/admin/user/:userId', authenticateJWT, requireAdmin, async (req, res
     const { password, access } = req.body || {};
 
     // Validate inputs
+    if (password) {
+      const lower = String(password).toLowerCase();
+      const containsBlacklisted = PASSWORD_BLACKLIST.some((w) => lower.includes(w));
+      if (containsBlacklisted) {
+        return res.status(400).json({ error: 'hbss,qyryde not allowed in password' });
+      }
+    }
     if (password && !PASSWORD_REGEX.test(password)) {
       return res.status(400).json({
         error: 'Password does not meet complexity requirements',

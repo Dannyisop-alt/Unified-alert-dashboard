@@ -34,12 +34,8 @@ export default function Login() {
       const data = await res.json();
       // Save token, access and role for ProtectedRoute checks
       saveAuth(data.token, data.access, email, data.role);
-      // Role-based redirect
-      if (data.role === 'admin') {
-        navigate('/admin', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      // Redirect all users (including admin) to alerts dashboard
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed');
     } finally {

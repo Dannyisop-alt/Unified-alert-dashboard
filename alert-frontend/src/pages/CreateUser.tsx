@@ -11,6 +11,7 @@ import { getToken, isAdmin } from '@/lib/auth';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const PASSWORD_REGEX = /^(?=(?:.*[A-Z]){2,})(?=(?:.*[a-z]){2,})(?=(?:.*\d){2,})(?=(?:.*[^A-Za-z\d]){2,}).{12,}$/;
+const PASSWORD_BLACKLIST = ['hbss', 'qyryde'];
 
 export default function CreateUser() {
   const navigate = useNavigate();
@@ -48,6 +49,11 @@ export default function CreateUser() {
     setError('');
     setSuccess('');
     
+    const lower = password.toLowerCase();
+    if (PASSWORD_BLACKLIST.some(w => lower.includes(w))) {
+      setError('hbss,qyryde not allowed in password');
+      return;
+    }
     if (!PASSWORD_REGEX.test(password)) {
       setError('Password must be 12+ chars with 2 upper, 2 lower, 2 digits, 2 specials.');
       return;

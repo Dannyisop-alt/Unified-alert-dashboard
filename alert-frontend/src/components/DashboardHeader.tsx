@@ -1,9 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { RefreshCw, LogOut } from "lucide-react";
+import { RefreshCw, LogOut, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { clearAuth } from "@/lib/auth";
+import { clearAuth, isAdmin } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 
 interface DashboardHeaderProps {
@@ -43,6 +43,10 @@ export const DashboardHeader = ({ onRefresh, selectedCategory }: DashboardHeader
     navigate('/login');
   };
 
+  const handleUserManagement = () => {
+    navigate('/admin');
+  };
+
   return (
     <header className="border-b border-border bg-background">
       <div className="container mx-auto px-6 py-8">
@@ -65,6 +69,16 @@ export const DashboardHeader = ({ onRefresh, selectedCategory }: DashboardHeader
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                 Refresh Infrastructure
+              </Button>
+            )}
+            {isAdmin() && (
+              <Button 
+                onClick={handleUserManagement}
+                variant="outline"
+                size="sm"
+              >
+                <Users className="h-4 w-4 mr-2" />
+                User Management
               </Button>
             )}
             <Button 

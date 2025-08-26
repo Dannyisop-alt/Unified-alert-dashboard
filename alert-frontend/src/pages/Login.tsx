@@ -36,12 +36,8 @@ export default function Login() {
       // Save authentication data including role
       saveAuth(data.token, data.access, email, data.role);
       
-      // Role-based redirect
-      if (data.role === 'admin') {
-        navigate('/admin', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
+      // Redirect all users (including admin) to alerts dashboard
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

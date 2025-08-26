@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { getToken, clearAuth, getEmail, isAdmin } from '@/lib/auth';
-import { UserPlus, Edit, LogOut, Users, Trash2 } from 'lucide-react';
+import { UserPlus, Edit, LogOut, Users, Trash2, LayoutDashboard } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -100,6 +100,10 @@ export default function AdminDashboard() {
     navigate('/login', { replace: true });
   };
 
+  const handleGoToMonitoring = () => {
+    navigate('/dashboard', { replace: true });
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -113,10 +117,16 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-bold">Admin Dashboard</h1>
             <p className="text-muted-foreground">Welcome, {getEmail()}</p>
           </div>
-          <Button onClick={handleLogout} variant="outline" className="gap-2">
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleGoToMonitoring} variant="outline" className="gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              Monitoring Dashboard
+            </Button>
+            <Button onClick={handleLogout} variant="outline" className="gap-2">
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         {error && (
