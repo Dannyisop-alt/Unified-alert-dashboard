@@ -9,14 +9,24 @@ export const processAlerts = (
 ): ProcessedAlert[] => {
   const processedAlerts: ProcessedAlert[] = [];
 
+  // Helper: Map severity label by source
+  const mapSeverity = (
+    severity: string,
+    source: 'Application Logs' | 'Application Heartbeat' | 'Infrastructure Alerts'
+  ): 'Critical' | 'Warning' | 'Error' | 'Info' => {
+    const s = (severity || '').toLowerCase();
+    if (s.includes('critical') || s === 'crit' || s === 'high') return 'Critical';
+    if (s.includes('warning') || s === 'warn' || s === 'medium' || s === 'low') return 'Warning';
+    if (s.includes('error') || s === 'err' || s === 'info') {
+      return source === 'Infrastructure Alerts' ? 'Error' : 'Info';
+    }
+    return source === 'Infrastructure Alerts' ? 'Error' : 'Info';
+  };
+
   // Process Graylog alerts
   graylogAlerts.forEach((alert) => {
-    let severity: 'Critical' | 'Warning' | 'Error' = 'Error';
-    
-    // Map backend severity to frontend severity
-    if (alert.severity === 'critical' || alert.severity === 'high') severity = 'Critical';
-    else if (alert.severity === 'medium' || alert.severity === 'low') severity = 'Warning';
-    else severity = 'Error';
+    const source: 'Application Logs' = 'Application Logs';
+    const severity = mapSeverity(alert.severity, source);
 
     // Determine category based on channel
     let category: 'heartbeat' | 'logs' | 'infrastructure' = 'logs';
@@ -28,7 +38,7 @@ export const processAlerts = (
 
     processedAlerts.push({
       id: alert._id || `graylog-${alert.timestamp}`,
-      source: 'Application Logs',
+      source,
       severity,
       title: alert.shortMessage || 'No title',
       description: alert.fullMessage || alert.shortMessage || 'No description',
@@ -39,16 +49,12 @@ export const processAlerts = (
 
   // Process OCI alerts
   ociAlerts.forEach((alert) => {
-    let severity: 'Critical' | 'Warning' | 'Error' = 'Error';
-    
-    // Map backend severity to frontend severity
-    if (alert.severity === 'critical' || alert.severity === 'high' || alert.severity === 'error') severity = 'Critical';
-    else if (alert.severity === 'medium' || alert.severity === 'low' || alert.severity === 'warning') severity = 'Warning';
-    else severity = 'Error';
+    const source: 'Infrastructure Alerts' = 'Infrastructure Alerts';
+    const severity = mapSeverity(alert.severity, source);
 
     processedAlerts.push({
       id: alert._id || `oci-${alert.timestamp}`,
-      source: 'Infrastructure Alerts',
+      source,
       severity,
       title: `${alert.vm}${(alert.alertType && alert.alertType !== 'OCI_ALARM') ? ` - ${alert.alertType}` : ''}`,
       description: alert.message || 'No description available',
@@ -65,16 +71,12 @@ export const processAlerts = (
 
   // Process Heartbeat alerts
   heartbeatAlerts.forEach((alert) => {
-    let severity: 'Critical' | 'Warning' | 'Error' = 'Error';
-    
-    // Map heartbeat severity to frontend severity
-    if (alert.severity === 'critical') severity = 'Critical';
-    else if (alert.severity === 'medium') severity = 'Warning';
-    else severity = 'Error';
+    const source: 'Application Heartbeat' = 'Application Heartbeat';
+    const severity = mapSeverity(alert.severity, source);
 
     processedAlerts.push({
       id: alert.id,
-      source: 'Application Heartbeat',
+      source,
       severity,
       title: `${alert.siteName} - ${alert.service}`,
       description: alert.message,

@@ -20,6 +20,7 @@ const getSeverityColor = (severity: string) => {
     case 'Warning':
       return 'secondary';
     case 'Error':
+    case 'Info':
       return 'outline';
     default:
       return 'outline';
@@ -33,6 +34,7 @@ const getSeverityBorderStyle = (severity: string) => {
     case 'Warning':
       return 'bg-orange-50 border border-orange-200';
     case 'Error':
+    case 'Info':
       return 'bg-blue-50 border border-blue-200';
     default:
       return 'bg-gray-50 border border-gray-200';
@@ -46,6 +48,7 @@ const getSeverityIconStyle = (severity: string) => {
     case 'Warning':
       return 'bg-orange-500 text-white';
     case 'Error':
+    case 'Info':
       return 'bg-blue-500 text-white';
     default:
       return 'bg-gray-500 text-white';
@@ -59,6 +62,7 @@ const getSeverityDotStyle = (severity: string) => {
     case 'Warning':
       return 'bg-orange-500';
     case 'Error':
+    case 'Info':
       return 'bg-blue-500';
     default:
       return 'bg-gray-500';

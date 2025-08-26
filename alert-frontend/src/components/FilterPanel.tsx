@@ -14,7 +14,16 @@ interface FilterPanelProps {
 }
 
 export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylogAlerts, ociAlerts, heartbeatAlerts }: FilterPanelProps) => {
-  const severityOptions = ['Critical', 'Warning', 'Error'];
+  // Dynamic severity options based on category
+  const getSeverityOptions = () => {
+    if (selectedCategory === 'infrastructure') {
+      return ['Critical', 'Warning', 'Error'];
+    } else if (selectedCategory === 'logs' || selectedCategory === 'heartbeat') {
+      return ['Critical', 'Warning', 'Info'];
+    }
+    return ['Critical', 'Warning', 'Error', 'Info'];
+  };
+  const severityOptions = getSeverityOptions();
   
   // Extract dynamic filters from actual alert data
   const extractChannelsFromLogs = () => {
