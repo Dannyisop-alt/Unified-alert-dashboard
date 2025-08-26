@@ -59,7 +59,7 @@ export const CategoryToggle = ({
               <Button
                 key={category.id}
                 variant={selectedCategory === category.id ? 'default' : 'ghost'}
-                onClick={() => onCategoryChange(selectedCategory === category.id ? null : category.id)}
+                onClick={() => onCategoryChange(category.id)}
                 className="flex items-center gap-2 relative"
               >
                 <Icon className="h-4 w-4" />

@@ -14,7 +14,7 @@ interface FilterPanelProps {
 }
 
 export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylogAlerts, ociAlerts, heartbeatAlerts }: FilterPanelProps) => {
-  const severityOptions = ['Critical', 'Warning', 'Info'];
+  const severityOptions = ['Critical', 'Warning', 'Error'];
   
   // Extract dynamic filters from actual alert data
   const extractChannelsFromLogs = () => {
@@ -29,22 +29,25 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
 
   const extractSystemsFromHeartbeat = () => {
     const systems = new Set<string>();
-    
-    // Always add base categories
-    systems.add('DB');
-    systems.add('MT SERVER'); 
-    systems.add('WEB');
-    
-    // Check if we have services with specific endings and add the corresponding filters
-    const hasDBSPC = heartbeatAlerts.some(alert => alert.service?.endsWith('_DBSPC'));
-    const hasAAL = heartbeatAlerts.some(alert => alert.service?.endsWith('_aal'));
-    const hasGSE = heartbeatAlerts.some(alert => alert.service?.endsWith('-gse'));
-    
-    if (hasDBSPC) systems.add('DBSPC');
-    if (hasAAL) systems.add('aal');
-    if (hasGSE) systems.add('gse');
-    
+    heartbeatAlerts.forEach(alert => {
+      if (alert.service) {
+        systems.add(alert.service);
+      }
+    });
     return Array.from(systems).sort();
+  };
+
+  const extractServersFromHeartbeat = () => {
+    const availableCategories = [];
+    const hasDbspc = heartbeatAlerts.some(alert => alert.site?.toLowerCase().endsWith('_dbspc'));
+    const hasGse = heartbeatAlerts.some(alert => alert.site?.toLowerCase().endsWith('-gse'));
+    const hasAal = heartbeatAlerts.some(alert => alert.site?.toLowerCase().endsWith('_aal'));
+    
+    if (hasDbspc) availableCategories.push('DBSPC');
+    if (hasGse) availableCategories.push('gse');
+    if (hasAal) availableCategories.push('aal');
+    
+    return availableCategories.sort();
   };
 
   const extractTenantsFromOCI = () => {
@@ -65,6 +68,32 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
       }
     });
     return Array.from(vms).sort();
+  };
+
+  const extractRegionsFromOCI = () => {
+    const regions = new Set<string>();
+    ociAlerts.forEach(alert => {
+      if (alert.region) {
+        regions.add(alert.region);
+      }
+    });
+    return Array.from(regions).sort();
+  };
+
+  const extractResourceTypesFromOCI = () => {
+    const resourceTypes = new Set<string>();
+    ociAlerts.forEach(alert => {
+      // Categorize based on alert type or metric name
+      if (alert.alertType?.toLowerCase().includes('database') || 
+          alert.metricName?.toLowerCase().includes('database') ||
+          alert.alertType?.toLowerCase().includes('db') ||
+          alert.vm?.toLowerCase().includes('db')) {
+        resourceTypes.add('Database');
+      } else {
+        resourceTypes.add('Server');
+      }
+    });
+    return Array.from(resourceTypes).sort();
   };
 
   // Context-sensitive source options based on selected category
@@ -92,7 +121,8 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
       const channels = extractChannelsFromLogs();
       const systems = extractSystemsFromHeartbeat();
       const vms = extractVMsFromOCI();
-      return ['ALL', ...channels, ...systems, ...vms];
+      const serverCategories = extractServersFromHeartbeat(); // DBSPC, gse, aal
+      return ['ALL', ...channels, ...systems, ...vms, ...serverCategories];
     }
     
     switch (selectedCategory) {
@@ -101,16 +131,10 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
         return ['ALL', ...logChannels];
       case 'heartbeat':
         const heartbeatSystems = extractSystemsFromHeartbeat();
-        return ['ALL', ...heartbeatSystems];
+        const serverCategories = extractServersFromHeartbeat(); // DBSPC, gse, aal
+        return ['ALL', ...heartbeatSystems, ...serverCategories];
       case 'infrastructure':
-        const tenants = extractTenantsFromOCI();
-        // Only show tenants if we have more than 3, otherwise show VMs
-        if (tenants.length > 3) {
-          return ['ALL', ...tenants];
-        } else {
-          const vms = extractVMsFromOCI();
-          return ['ALL', ...vms.slice(0, 10)]; // Limit to 10 most common VMs
-        }
+        return [];
       default:
         return ['ALL'];
     }
@@ -154,20 +178,60 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
           Filters
         </div>
 
-        <div className="flex items-center gap-2">
-          <Select value={filters.dynamicFilter || 'ALL'} onValueChange={handleDynamicFilterChange}>
-            <SelectTrigger className="w-[99px] h-9 bg-background border-border">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent className="bg-background border-border shadow-lg z-50">
-              {dynamicFilterOptions.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {selectedCategory === 'heartbeat' && (
+          <div className="flex items-center gap-2">
+            <Select value={filters.dynamicFilter || 'ALL'} onValueChange={handleDynamicFilterChange}>
+              <SelectTrigger className="w-[99px] h-9 bg-background border-border">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border-border shadow-lg z-50">
+                {dynamicFilterOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {selectedCategory === 'infrastructure' && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Region:</span>
+              <Select value={filters.region || 'ALL'} onValueChange={(value) => onFiltersChange({ ...filters, region: value === 'ALL' ? undefined : value })}>
+                <SelectTrigger className="w-[150px] h-9 bg-background border-border">
+                  <SelectValue placeholder="All Regions" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border-border shadow-lg z-50">
+                  <SelectItem value="ALL">All Regions</SelectItem>
+                  {extractRegionsFromOCI().map((region) => (
+                    <SelectItem key={region} value={region}>
+                      {region}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Resource Type:</span>
+              <Select value={filters.resourceType || 'ALL'} onValueChange={(value) => onFiltersChange({ ...filters, resourceType: value === 'ALL' ? undefined : value })}>
+                <SelectTrigger className="w-[120px] h-9 bg-background border-border">
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border-border shadow-lg z-50">
+                  <SelectItem value="ALL">All Types</SelectItem>
+                  {extractResourceTypesFromOCI().map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
         
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Severity:</span>

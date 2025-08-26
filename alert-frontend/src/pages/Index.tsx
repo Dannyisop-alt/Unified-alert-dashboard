@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import type { AlertCategory, UserPreferences, AlertFilters } from '@/types/alerts';
 
 const Index = () => {
-  const [selectedCategory, setSelectedCategory] = useState<AlertCategory>(null);
+  const [selectedCategory, setSelectedCategory] = useState<AlertCategory>('heartbeat');
   const [heartbeatCriticalCount, setHeartbeatCriticalCount] = useState<number>(0);
   const [logsCriticalCount, setLogsCriticalCount] = useState<number>(0);
   const [infrastructureCriticalCount, setInfrastructureCriticalCount] = useState<number>(0);
@@ -100,21 +100,17 @@ const Index = () => {
   // Save preferences and update source filter when category changes
   const handleCategoryChange = (category: AlertCategory) => {
     setSelectedCategory(category);
-    const newPreferences = { ...userPreferences, defaultCategory: category || 'logs' };
+    const newPreferences = { ...userPreferences, defaultCategory: category || 'heartbeat' };
     setUserPreferences(newPreferences);
     localStorage.setItem('userPreferences', JSON.stringify(newPreferences));
     
-    // Auto-select corresponding source or show all if none selected
-    if (category === null) {
-      setFilters(prev => ({ ...prev, source: [] })); // Show all sources
-    } else {
-      const sourceMap = {
-        'heartbeat': 'Application Heartbeat',
-        'logs': 'Application Logs',
-        'infrastructure': 'Infrastructure Alerts'
-      };
-      setFilters(prev => ({ ...prev, source: [sourceMap[category]] }));
-    }
+    // Auto-select corresponding source
+    const sourceMap = {
+      'heartbeat': 'Application Heartbeat',
+      'logs': 'Application Logs',
+      'infrastructure': 'Infrastructure Alerts'
+    };
+    setFilters(prev => ({ ...prev, source: [sourceMap[category!]] }));
   };
 
   // Calculate critical alert counts only
@@ -135,7 +131,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <div className="relative">
         {/* Header */}
-        <DashboardHeader onRefresh={handleRefresh} />
+        <DashboardHeader onRefresh={handleRefresh} selectedCategory={selectedCategory} />
         
         {/* Category Toggle */}
         <CategoryToggle 

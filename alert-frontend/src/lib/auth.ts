@@ -33,5 +33,3 @@ export function getAccess(): UserAccess[] {
 export function isAuthenticated(): boolean {
   return !!getToken();
 }
-
-

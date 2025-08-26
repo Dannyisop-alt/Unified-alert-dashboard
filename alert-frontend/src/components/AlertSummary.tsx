@@ -4,14 +4,14 @@ interface AlertSummaryProps {
   totalAlerts: number;
   criticalAlerts: number;
   warningAlerts: number;
-  infoAlerts: number;
+  errorAlerts: number;
 }
 
 export const AlertSummary = ({ 
   totalAlerts, 
   criticalAlerts, 
   warningAlerts, 
-  infoAlerts 
+  errorAlerts 
 }: AlertSummaryProps) => {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -51,10 +51,10 @@ export const AlertSummary = ({
       <Card className="border border-border bg-card">
         <CardContent className="p-6 text-center">
           <div className="text-3xl font-bold text-info mb-1">
-            {infoAlerts}
+            {errorAlerts}
           </div>
           <div className="text-sm text-muted-foreground">
-            Info
+            Error
           </div>
         </CardContent>
       </Card>

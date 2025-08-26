@@ -11,12 +11,12 @@ export const processAlerts = (
 
   // Process Graylog alerts
   graylogAlerts.forEach((alert) => {
-    let severity: 'Critical' | 'Warning' | 'Info' = 'Info';
+    let severity: 'Critical' | 'Warning' | 'Error' = 'Error';
     
     // Map backend severity to frontend severity
     if (alert.severity === 'critical' || alert.severity === 'high') severity = 'Critical';
     else if (alert.severity === 'medium' || alert.severity === 'low') severity = 'Warning';
-    else severity = 'Info';
+    else severity = 'Error';
 
     // Determine category based on channel
     let category: 'heartbeat' | 'logs' | 'infrastructure' = 'logs';
@@ -39,18 +39,18 @@ export const processAlerts = (
 
   // Process OCI alerts
   ociAlerts.forEach((alert) => {
-    let severity: 'Critical' | 'Warning' | 'Info' = 'Info';
+    let severity: 'Critical' | 'Warning' | 'Error' = 'Error';
     
     // Map backend severity to frontend severity
     if (alert.severity === 'critical' || alert.severity === 'high' || alert.severity === 'error') severity = 'Critical';
     else if (alert.severity === 'medium' || alert.severity === 'low' || alert.severity === 'warning') severity = 'Warning';
-    else severity = 'Info';
+    else severity = 'Error';
 
     processedAlerts.push({
       id: alert._id || `oci-${alert.timestamp}`,
       source: 'Infrastructure Alerts',
       severity,
-      title: `${alert.vm} - ${alert.alertType || 'Alert'}`,
+      title: `${alert.vm}${(alert.alertType && alert.alertType !== 'OCI_ALARM') ? ` - ${alert.alertType}` : ''}`,
       description: alert.message || 'No description available',
       timestamp: alert.timestamp,
       site: alert.vm,
@@ -65,12 +65,12 @@ export const processAlerts = (
 
   // Process Heartbeat alerts
   heartbeatAlerts.forEach((alert) => {
-    let severity: 'Critical' | 'Warning' | 'Info' = 'Info';
+    let severity: 'Critical' | 'Warning' | 'Error' = 'Error';
     
     // Map heartbeat severity to frontend severity
     if (alert.severity === 'critical') severity = 'Critical';
     else if (alert.severity === 'medium') severity = 'Warning';
-    else severity = 'Info';
+    else severity = 'Error';
 
     processedAlerts.push({
       id: alert.id,
@@ -149,48 +149,53 @@ export const processAlerts = (
         }
       }
       
-      // For heartbeat alerts
+      // For heartbeat alerts - check both service name and server categories
       if (alert.source === 'Application Heartbeat') {
         const heartbeatAlert = heartbeatAlerts.find(h => h.id === alert.id);
-        if (heartbeatAlert && heartbeatAlert.service) {
-          const serviceName = heartbeatAlert.service;
-          
-          // Handle specific ending patterns
-          if (filterValue === 'DBSPC') {
-            return serviceName.endsWith('_DBSPC');
+        if (heartbeatAlert) {
+          // Check if filter matches service name
+          if (heartbeatAlert.service?.toLowerCase() === filterValue.toLowerCase()) {
+            return true;
           }
-          if (filterValue === 'aal') {
-            return serviceName.endsWith('_aal');
+          // Check if filter matches server category (DBSPC, gse, aal)
+          if (heartbeatAlert.site) {
+            const site = heartbeatAlert.site.toLowerCase();
+            if (filterValue === 'DBSPC' && site.endsWith('_dbspc')) {
+              return true;
+            } else if (filterValue === 'gse' && site.endsWith('-gse')) {
+              return true;
+            } else if (filterValue === 'aal' && site.endsWith('_aal')) {
+              return true;
+            }
           }
-          if (filterValue === 'gse') {
-            return serviceName.endsWith('-gse');
-          }
-          
-          // Handle existing filters
-          if (filterValue === 'DB') {
-            return serviceName.toLowerCase().includes('db') && 
-                   !serviceName.endsWith('_DBSPC');
-          }
-          if (filterValue === 'MT SERVER') {
-            return (serviceName.toLowerCase().includes('mt') || 
-                    serviceName.toLowerCase().includes('server')) &&
-                   !serviceName.endsWith('_aal') && 
-                   !serviceName.endsWith('-gse') && 
-                   !serviceName.endsWith('_DBSPC');
-          }
-          if (filterValue === 'WEB') {
-            return serviceName.toLowerCase().includes('web') &&
-                   !serviceName.endsWith('_aal') && 
-                   !serviceName.endsWith('-gse') && 
-                   !serviceName.endsWith('_DBSPC');
-          }
-          
-          // Exact match for other values
-          return serviceName.toLowerCase() === filterValue.toLowerCase();
         }
       }
       
       return false;
+    });
+  }
+
+  // Apply infrastructure-specific filters
+  if (filters.region && filters.region !== 'ALL') {
+    filteredAlerts = filteredAlerts.filter(alert => 
+      alert.source !== 'Infrastructure Alerts' || alert.region === filters.region
+    );
+  }
+
+  if (filters.resourceType && filters.resourceType !== 'ALL') {
+    filteredAlerts = filteredAlerts.filter(alert => {
+      if (alert.source !== 'Infrastructure Alerts') return true;
+      
+      const ociAlert = ociAlerts.find(o => o.timestamp === alert.timestamp);
+      if (!ociAlert) return false;
+      
+      // Categorize based on alert type or metric name
+      const isDatabase = ociAlert.alertType?.toLowerCase().includes('database') || 
+                        ociAlert.metricName?.toLowerCase().includes('database') ||
+                        ociAlert.alertType?.toLowerCase().includes('db') ||
+                        ociAlert.vm?.toLowerCase().includes('db');
+      
+      return filters.resourceType === 'Database' ? isDatabase : !isDatabase;
     });
   }
 

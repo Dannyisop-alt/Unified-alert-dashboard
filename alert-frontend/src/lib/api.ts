@@ -12,7 +12,7 @@ export const api = {
     
     const response = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${getToken() || ''}`,
+        'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json'
       }
     });
@@ -39,7 +39,7 @@ export const api = {
     
     const response = await fetch(url.toString(), {
       headers: {
-        'Authorization': `Bearer ${getToken() || ''}`,
+        'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json'
       }
     });
@@ -86,10 +86,7 @@ export const api = {
   async triggerOCIAlertPull(): Promise<{ message: string; newAlerts: any[] }> {
     const response = await fetch(`${API_BASE_URL}/oci-alerts/pull`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken() || ''}`,
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
     if (!response.ok) throw new Error('Failed to trigger OCI alert pull');
     return response.json();

@@ -35,6 +35,8 @@ export interface AlertFilters {
   timeRange: string;
   searchText: string;
   dynamicFilter: string;
+  region?: string;
+  resourceType?: string;
 }
 
 export type AlertCategory = 'heartbeat' | 'logs' | 'infrastructure' | null;
@@ -47,7 +49,7 @@ export interface UserPreferences {
 export interface ProcessedAlert {
   id: string;
   source: 'Application Logs' | 'Application Heartbeat' | 'Infrastructure Alerts';
-  severity: 'Critical' | 'Warning' | 'Info';
+  severity: 'Critical' | 'Warning' | 'Error';
   title: string;
   description: string;
   timestamp: string;

@@ -19,7 +19,7 @@ const getSeverityColor = (severity: string) => {
       return 'destructive';
     case 'Warning':
       return 'secondary';
-    case 'Info':
+    case 'Error':
       return 'outline';
     default:
       return 'outline';
@@ -32,7 +32,7 @@ const getSeverityBorderStyle = (severity: string) => {
       return 'bg-red-50 border border-red-200';
     case 'Warning':
       return 'bg-orange-50 border border-orange-200';
-    case 'Info':
+    case 'Error':
       return 'bg-blue-50 border border-blue-200';
     default:
       return 'bg-gray-50 border border-gray-200';
@@ -45,7 +45,7 @@ const getSeverityIconStyle = (severity: string) => {
       return 'bg-red-500 text-white';
     case 'Warning':
       return 'bg-orange-500 text-white';
-    case 'Info':
+    case 'Error':
       return 'bg-blue-500 text-white';
     default:
       return 'bg-gray-500 text-white';
@@ -58,7 +58,7 @@ const getSeverityDotStyle = (severity: string) => {
       return 'bg-red-500';
     case 'Warning':
       return 'bg-orange-500';
-    case 'Info':
+    case 'Error':
       return 'bg-blue-500';
     default:
       return 'bg-gray-500';
@@ -136,17 +136,17 @@ export const AlertCard = ({ alert }: AlertCardProps) => {
                     <div className="text-sm break-words text-gray-600">
                       {isExpanded ? safeDescription : truncatedDescription}
                     </div>
-                    {/* Show OCI-specific fields for Infrastructure Alerts */}
-                    {alert.source === 'Infrastructure Alerts' && (alert.compartment || alert.metricName) && (
+                    {/* Show only non-sensitive OCI fields for Infrastructure Alerts */}
+                    {alert.source === 'Infrastructure Alerts' && (
                       <div className="mt-2 text-xs space-y-1 text-gray-500">
-                        {alert.compartment && (
+                        {alert.region && (
                           <div>
-                            <span className="font-medium">Compartment:</span> {alert.compartment}
+                            <span className="font-medium">Region:</span> {alert.region}
                           </div>
                         )}
-                        {alert.metricName && (
+                        {alert.tenant && (
                           <div>
-                            <span className="font-medium">Metric:</span> {alert.metricName}
+                            <span className="font-medium">Tenant:</span> {alert.tenant}
                           </div>
                         )}
                       </div>
