@@ -68,7 +68,6 @@ export const api = {
     return response.json();
   },
 
-
   // Get filter options for OCI alerts
   async getOCIFilterOptions(): Promise<{
     vms: string[];
@@ -89,6 +88,102 @@ export const api = {
       headers: { 'Content-Type': 'application/json' }
     });
     if (!response.ok) throw new Error('Failed to trigger OCI alert pull');
+    return response.json();
+  },
+
+  // ADMIN API CALLS
+  async adminCreateUser(userData: { email: string; password: string; access: string }): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/auth/admin/create-user`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(userData)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to create user');
+    }
+    
+    return response.json();
+  },
+
+  async adminGetUser(userId: string): Promise<{
+    email: string;
+    access: string[];
+    role: string;
+    createdAt: string;
+  }> {
+    const response = await fetch(`${API_BASE_URL}/auth/admin/user/${encodeURIComponent(userId)}`, {
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to fetch user');
+    }
+    
+    return response.json();
+  },
+
+  async adminUpdateUser(userId: string, updateData: { password?: string; access?: string }): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/auth/admin/user/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(updateData)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to update user');
+    }
+    
+    return response.json();
+  },
+
+  async adminListUsers(): Promise<Array<{
+    email: string;
+    access: string[];
+    role: string;
+    createdAt: string;
+  }>> {
+    const response = await fetch(`${API_BASE_URL}/auth/admin/users`, {
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to fetch users');
+    }
+    
+    return response.json();
+  },
+
+  async adminDeleteUser(userId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/auth/admin/user/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to delete user');
+    }
+    
     return response.json();
   }
 };

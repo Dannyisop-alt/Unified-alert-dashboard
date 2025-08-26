@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,8 +32,16 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
       const data = await res.json();
-      saveAuth(data.token, data.access, email);
-      navigate('/', { replace: true });
+      
+      // Save authentication data including role
+      saveAuth(data.token, data.access, email, data.role);
+      
+      // Role-based redirect
+      if (data.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -71,11 +79,10 @@ export default function Login() {
             {error && (
               <div className="text-sm text-destructive">{error}</div>
             )}
-            <div className="flex items-center justify-between">
-              <Button type="submit" disabled={loading}>
+            <div className="flex justify-center">
+              <Button type="submit" disabled={loading} className="w-full">
                 {loading ? 'Signing in...' : 'Sign in'}
               </Button>
-              <Link to="/register" className="text-sm text-primary underline-offset-4 hover:underline">Create account</Link>
             </div>
           </form>
         </CardContent>

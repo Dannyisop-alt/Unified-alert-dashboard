@@ -2,20 +2,18 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
-import Register from "./pages/Register";
-import { isAuthenticated } from "./lib/auth";
+import AdminDashboard from "./pages/AdminDashboard";
+import CreateUser from "./pages/CreateUser";
+import EditUser from "./pages/EditUsers";
+import { ProtectedRoute } from "./components/ProtectedRoute.tsx"; // Use the new dedicated component
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-    return isAuthenticated() ? <>{children}</> : <Login />;
-  };
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -24,13 +22,36 @@ const App = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/" element={
+            {/* Redirect root to login */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            
+            {/* Main protected route for all authenticated users */}
+            <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Index />
               </ProtectedRoute>
             } />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+
+            {/* Admin-only routes, protected by the requireAdmin flag */}
+            <Route path="/admin" element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/create-user" element={
+              <ProtectedRoute requireAdmin={true}>
+                <CreateUser />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/edit-user/:userId" element={
+              <ProtectedRoute requireAdmin={true}>
+                <EditUser />
+              </ProtectedRoute>
+            } />
+
+            {/* CATCH-ALL "*" ROUTE */}
+
+            {/* CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
