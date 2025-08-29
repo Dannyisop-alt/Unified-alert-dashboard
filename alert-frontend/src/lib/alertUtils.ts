@@ -9,18 +9,123 @@ export const processAlerts = (
 ): ProcessedAlert[] => {
   const processedAlerts: ProcessedAlert[] = [];
 
+  // Helper: Determine if an OCI alert is database-related
+  const isDatabaseAlert = (alert: OCIAlert): boolean => {
+    const vmName = (alert.vm || '').toLowerCase();
+    const message = (alert.message || '').toLowerCase();
+    const metricName = (alert.metricName || '').toLowerCase();
+    const alertType = (alert.alertType || '').toLowerCase();
+    
+    // Database-related VM name patterns
+    const dbVmPatterns = [
+      'db', 'database', 'sql', 'oracle', 'mysql', 'postgres', 'mongo', 'redis',
+      'dbspc', 'db-prod', 'db-dev', 'db-stage', 'db-test', 'db-uat',
+      'oracle-db', 'mysql-db', 'postgres-db', 'mongo-db', 'redis-db',
+      'gatra', 'gatra-db', 'gatra_prod', 'gatra_dev', 'gatra_stage'
+    ];
+    
+    // Database-related message patterns
+    const dbMessagePatterns = [
+      'database', 'db', 'sql', 'oracle', 'mysql', 'postgres', 'mongo', 'redis',
+      'connection pool', 'query timeout', 'deadlock', 'lock wait',
+      'buffer cache', 'shared pool', 'data file', 'tablespace',
+      'index', 'table scan', 'full table scan', 'partition',
+      'backup', 'recovery', 'archive', 'redo log', 'undo',
+      'performance', 'slow query', 'execution plan', 'statistics',
+      'sessions', 'session', 'connection', 'query', 'transaction',
+      'lock', 'wait', 'timeout', 'pool', 'cache', 'buffer',
+      'iops', 'throughput', 'latency', 'response time'
+    ];
+    
+    // Database-related metric patterns
+    const dbMetricPatterns = [
+      'database', 'db', 'sql', 'oracle', 'mysql', 'postgres', 'mongo', 'redis',
+      'connection', 'session', 'query', 'transaction', 'lock',
+      'buffer', 'cache', 'memory', 'storage', 'iops',
+      'cpu_utilization', 'memory_utilization', 'storage_utilization',
+      'active_sessions', 'total_sessions', 'wait_time', 'sessions',
+      'gatra', 'gatra_sessions', 'gatra_sessions_alert',
+      'connection_count', 'session_count', 'query_count',
+      'transaction_count', 'lock_count', 'wait_count',
+      'buffer_hit_ratio', 'cache_hit_ratio', 'memory_usage',
+      'storage_usage', 'iops_count', 'throughput_rate',
+      'latency_ms', 'response_time_ms'
+    ];
+    
+    // Check VM name patterns
+    if (dbVmPatterns.some(pattern => vmName.includes(pattern))) {
+      return true;
+    }
+    
+    // Check message patterns
+    if (dbMessagePatterns.some(pattern => message.includes(pattern))) {
+      return true;
+    }
+    
+    // Check metric name patterns
+    if (dbMetricPatterns.some(pattern => metricName.includes(pattern))) {
+      return true;
+    }
+    
+    // Check for specific database error patterns
+    if (message.includes('ora-') || message.includes('mysql error') || 
+        message.includes('postgres error') || message.includes('connection failed') ||
+        message.includes('session') || message.includes('connection') ||
+        message.includes('query') || message.includes('transaction')) {
+      return true;
+    }
+    
+    // Check for GATRA-specific patterns (common in your system)
+    if (vmName.includes('gatra') || message.includes('gatra') || metricName.includes('gatra')) {
+      return true;
+    }
+    
+    // Check for session-related patterns
+    if (message.includes('sessions') || message.includes('session') || 
+        metricName.includes('sessions') || metricName.includes('session')) {
+      return true;
+    }
+    
+    // Check for common database performance indicators
+    if (message.includes('high cpu') || message.includes('high memory') || 
+        message.includes('high iops') || message.includes('high throughput') ||
+        message.includes('slow response') || message.includes('timeout') ||
+        message.includes('connection limit') || message.includes('pool exhausted')) {
+      return true;
+    }
+    
+    // Check for database-specific alert names
+    if (alertType.includes('sessions') || alertType.includes('connection') ||
+        alertType.includes('query') || alertType.includes('transaction') ||
+        alertType.includes('lock') || alertType.includes('wait') ||
+        alertType.includes('performance') || alertType.includes('throughput')) {
+      return true;
+    }
+    
+    return false;
+  };
+
   // Helper: Map severity label by source
   const mapSeverity = (
     severity: string,
     source: 'Application Logs' | 'Application Heartbeat' | 'Infrastructure Alerts'
   ): 'Critical' | 'Warning' | 'Error' | 'Info' => {
     const s = (severity || '').toLowerCase();
-    if (s.includes('critical') || s === 'crit' || s === 'high') return 'Critical';
-    if (s.includes('warning') || s === 'warn' || s === 'medium' || s === 'low') return 'Warning';
-    if (s.includes('error') || s === 'err' || s === 'info') {
-      return source === 'Infrastructure Alerts' ? 'Error' : 'Info';
+    
+    // For Infrastructure Alerts: support Critical, Warning, Info, Error
+    if (source === 'Infrastructure Alerts') {
+      if (s.includes('critical') || s === 'crit' || s === 'high') return 'Critical';
+      if (s.includes('warning') || s === 'warn' || s === 'medium') return 'Warning';
+      if (s.includes('error') || s === 'err') return 'Error';
+      if (s.includes('info') || s === 'low') return 'Info';
+      return 'Info'; // Default for infrastructure
     }
-    return source === 'Infrastructure Alerts' ? 'Error' : 'Info';
+    
+    // For Application Logs and Heartbeat: support Critical, Warning, Info only
+    if (s.includes('critical') || s === 'crit' || s === 'high') return 'Critical';
+    if (s.includes('warning') || s === 'warn' || s === 'medium') return 'Warning';
+    if (s.includes('error') || s === 'err' || s.includes('info') || s === 'low') return 'Info';
+    return 'Info'; // Default for logs and heartbeat
   };
 
   // Process Graylog alerts
@@ -52,20 +157,56 @@ export const processAlerts = (
     const source: 'Infrastructure Alerts' = 'Infrastructure Alerts';
     const severity = mapSeverity(alert.severity, source);
 
+    // Extract the actual alert message/title from the message field
+    let alertTitle = alert.message || 'No title available';
+    
+    // If message contains "Processing Error" or similar, try to extract meaningful info
+    if (alertTitle.includes('Processing Error') || alertTitle.includes('OCI_ALARM_ERROR') || alertTitle.includes('Failed to process')) {
+      // Try to use metricName or alertType if available
+      if (alert.metricName && alert.metricName !== 'Unknown' && alert.metricName !== 'ProcessingError') {
+        alertTitle = alert.metricName;
+      } else if (alert.alertType && alert.alertType !== 'OCI_ALARM' && alert.alertType !== 'OCI_ALARM_ERROR') {
+        alertTitle = alert.alertType;
+      } else {
+        // Fallback to a more descriptive title
+        alertTitle = `Alert on ${alert.vm}`;
+      }
+    }
+    
+    // Clean up the title if it's too long or contains unnecessary information
+    if (alertTitle.length > 100) {
+      alertTitle = alertTitle.substring(0, 97) + '...';
+    }
+    
+    // Remove common prefixes that don't add value
+    alertTitle = alertTitle.replace(/^(OCI_|ALARM_|ERROR_)/i, '');
+
+    // Determine resource type and category
+    const isDatabase = isDatabaseAlert(alert);
+    const resourceType: 'Database' | 'Server' = isDatabase ? 'Database' : 'Server';
+    const category: 'infrastructure' | 'database' = isDatabase ? 'database' : 'infrastructure';
+    
+    // Debug logging for categorization
+    console.log(`🔍 [CATEGORIZATION] Alert: ${alert.vm} - "${alert.message}"`);
+    console.log(`🔍 [CATEGORIZATION] Metric: ${alert.metricName}, Type: ${alert.alertType}`);
+    console.log(`🔍 [CATEGORIZATION] Categorized as: ${resourceType} (${category})`);
+    console.log(`🔍 [CATEGORIZATION] Database detection: ${isDatabase}`);
+
     processedAlerts.push({
       id: alert._id || `oci-${alert.timestamp}`,
       source,
       severity,
-      title: `${alert.vm}${(alert.alertType && alert.alertType !== 'OCI_ALARM') ? ` - ${alert.alertType}` : ''}`,
+      title: alertTitle,
       description: alert.message || 'No description available',
       timestamp: alert.timestamp,
       site: alert.vm,
       
-      category: 'infrastructure',
+      category: category,
       region: alert.region,
       compartment: alert.compartment,
       metricName: alert.metricName,
-      tenant: alert.tenant
+      tenant: alert.tenant,
+      resourceType: resourceType
     });
   });
 
@@ -188,16 +329,8 @@ export const processAlerts = (
     filteredAlerts = filteredAlerts.filter(alert => {
       if (alert.source !== 'Infrastructure Alerts') return true;
       
-      const ociAlert = ociAlerts.find(o => o.timestamp === alert.timestamp);
-      if (!ociAlert) return false;
-      
-      // Categorize based on alert type or metric name
-      const isDatabase = ociAlert.alertType?.toLowerCase().includes('database') || 
-                        ociAlert.metricName?.toLowerCase().includes('database') ||
-                        ociAlert.alertType?.toLowerCase().includes('db') ||
-                        ociAlert.vm?.toLowerCase().includes('db');
-      
-      return filters.resourceType === 'Database' ? isDatabase : !isDatabase;
+      // Use the resourceType field that was set during processing
+      return alert.resourceType === filters.resourceType;
     });
   }
 

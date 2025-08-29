@@ -39,7 +39,7 @@ export interface AlertFilters {
   resourceType?: string;
 }
 
-export type AlertCategory = 'heartbeat' | 'logs' | 'infrastructure' | null;
+export type AlertCategory = 'heartbeat' | 'logs' | 'infrastructure' | 'database' | null;
 
 export interface UserPreferences {
   defaultCategory: AlertCategory;
@@ -49,7 +49,7 @@ export interface UserPreferences {
 export interface ProcessedAlert {
   id: string;
   source: 'Application Logs' | 'Application Heartbeat' | 'Infrastructure Alerts';
-  severity: 'Critical' | 'Warning' | 'Error';
+  severity: 'Critical' | 'Warning' | 'Error' | 'Info';
   title: string;
   description: string;
   timestamp: string;
@@ -65,4 +65,5 @@ export interface ProcessedAlert {
   compartment?: string;
   metricName?: string;
   tenant?: string;
+  resourceType?: 'Database' | 'Server';
 }

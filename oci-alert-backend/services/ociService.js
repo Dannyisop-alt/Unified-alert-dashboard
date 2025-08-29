@@ -392,22 +392,10 @@ async function getOCIAlerts() {
             } catch (alarmError) {
                 console.error(`❌ [ERROR] [${alarmIndex}/${totalAlarms}] Error processing alarm ${alarm.displayName}:`, alarmError.message);
                 console.error(`❌ [ERROR] [${alarmIndex}/${totalAlarms}] Error stack:`, alarmError.stack);
-
-                const errorAlert = {
-                    id: alarm.id,
-                    severity: 'error',
-                    message: alarm.displayName || 'Failed to process OCI alarm',
-                    vm: 'Processing Error',
-                    tenant: await getCompartmentName(alarm.compartmentId).catch(() => 'Unknown'),
-                    region: provider.getRegion().regionId,
-                    compartment: alarm.compartmentId,
-                    alertType: 'OCI_ALARM_ERROR',
-                    metricName: 'ProcessingError',
-                    timestamp: alarm.timeUpdated || new Date()
-                };
                 
-                alerts.push(errorAlert);
-                console.log(`🔧 [ERROR_ALERT] [${alarmIndex}/${totalAlarms}] Error alert created:`, JSON.stringify(errorAlert, null, 2));
+                // Don't create fake error alerts - just log the error and continue
+                // This ensures only real Oracle data gets through to the frontend
+                console.log(`⚠️ [SKIP] [${alarmIndex}/${totalAlarms}] Skipping failed alarm, continuing with next one`);
             }
         }
 
@@ -415,7 +403,7 @@ async function getOCIAlerts() {
         console.log(`🎉 [COMPLETE] OCI Alert Pull Complete!`);
         console.log(`📊 [STATS] Total alarms processed: ${alarmsResponse.items.length}`);
         console.log(`📊 [STATS] Total alerts generated: ${alerts.length}`);
-        console.log(`📊 [STATS] Success rate: ${(((alerts.length - alerts.filter(a => a.alertType === 'OCI_ALARM_ERROR').length) / alarmsResponse.items.length) * 100).toFixed(1)}%`);
+        console.log(`📊 [STATS] Success rate: ${((alerts.length / alarmsResponse.items.length) * 100).toFixed(1)}%`);
         console.log(`⏰ [COMPLETE] Process completed at: ${new Date().toISOString()}`);
         console.log(`🎉 [COMPLETE] =====================================\n`);
         
@@ -427,22 +415,11 @@ async function getOCIAlerts() {
         console.error("❌ [CRITICAL] Error stack:", error.stack);
         console.error("❌ [CRITICAL] Timestamp:", new Date().toISOString());
         console.error("❌ [CRITICAL] =====================================\n");
-
-        const criticalErrorAlert = {
-            severity: 'critical',
-            message: `OCI Service Error: ${error.message}`,
-            vm: 'Service Connection Failed',
-            tenant: 'OCI Service',
-            region: 'error',
-            compartment: 'error',
-            alertType: 'OCI_SERVICE_ERROR',
-            metricName: 'ConnectionError',
-            timestamp: new Date()
-        };
         
-        console.log(`🚨 [CRITICAL_ALERT] Critical error alert created:`, JSON.stringify(criticalErrorAlert, null, 2));
-        
-        return [criticalErrorAlert];
+        // Don't create fake error alerts - return empty array instead
+        // This ensures only real Oracle data gets through to the frontend
+        console.log(`🚨 [CRITICAL] No alerts returned due to service error - frontend will show empty state`);
+        return [];
     }
 }
 

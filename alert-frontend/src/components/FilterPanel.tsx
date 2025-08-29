@@ -17,7 +17,7 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
   // Dynamic severity options based on category
   const getSeverityOptions = () => {
     if (selectedCategory === 'infrastructure') {
-      return ['Critical', 'Warning', 'Error'];
+      return ['Critical', 'Warning', 'Info', 'Error'];
     } else if (selectedCategory === 'logs' || selectedCategory === 'heartbeat') {
       return ['Critical', 'Warning', 'Info'];
     }
@@ -90,19 +90,9 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
   };
 
   const extractResourceTypesFromOCI = () => {
-    const resourceTypes = new Set<string>();
-    ociAlerts.forEach(alert => {
-      // Categorize based on alert type or metric name
-      if (alert.alertType?.toLowerCase().includes('database') || 
-          alert.metricName?.toLowerCase().includes('database') ||
-          alert.alertType?.toLowerCase().includes('db') ||
-          alert.vm?.toLowerCase().includes('db')) {
-        resourceTypes.add('Database');
-      } else {
-        resourceTypes.add('Server');
-      }
-    });
-    return Array.from(resourceTypes).sort();
+    // Since we're now processing alerts in alertUtils, we'll return the standard types
+    // The actual categorization happens during alert processing
+    return ['Database', 'Server'];
   };
 
   // Context-sensitive source options based on selected category
@@ -231,11 +221,8 @@ export const FilterPanel = ({ filters, onFiltersChange, selectedCategory, graylo
                 </SelectTrigger>
                 <SelectContent className="bg-background border-border shadow-lg z-50">
                   <SelectItem value="ALL">All Types</SelectItem>
-                  {extractResourceTypesFromOCI().map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="Database">Database</SelectItem>
+                  <SelectItem value="Server">Server</SelectItem>
                 </SelectContent>
               </Select>
             </div>
