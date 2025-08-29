@@ -14,12 +14,8 @@ router.post('/pull', async (req, res) => {
     // Iterate through the alerts and save them to the database
     const savedAlerts = [];
     for (const alertData of ociAlerts) {
-      // Check for a duplicate to prevent saving the same alert multiple times
-      const existingAlert = await OCIAlert.findOne({ 
-        message: alertData.message,
-        vm: alertData.vm,
-        timestamp: alertData.timestamp
-      });
+      // ✅ FIX: Check for a duplicate using the unique 'id' from Oracle
+      const existingAlert = await OCIAlert.findOne({ id: alertData.id });
       
       if (!existingAlert) {
         const newAlert = new OCIAlert(alertData);

@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const ociAlertSchema = new mongoose.Schema({
+  // New field to store the unique Oracle alarm ID
+  id: {
+    type: String,
+    required: true,
+    unique: true
+  },
   severity: {
     type: String,
     // Updated enum list to include all possible OCI alarm severities
@@ -28,7 +34,7 @@ const ociAlertSchema = new mongoose.Schema({
   unit: String,
   timestamp: {
     type: Date,
-    default: Date.now
+    // The default value has been removed.
   },
   read: {
     type: Boolean,
