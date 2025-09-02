@@ -48,30 +48,22 @@ const instanceNameMap = new Map();
 
 console.log(`🔧 [CACHE] Initialized performance caches`);
 
+// Function to clear compartment cache for testing
+const clearCompartmentCache = () => {
+    compartmentNameCache.clear();
+    console.log(`🧹 [CACHE] Compartment cache cleared`);
+};
+
+// Clear cache on startup to ensure fresh detection
+clearCompartmentCache();
+
 /**
  * Enhanced Tenant Name Extraction
- * Handles special cases, like PaaS compartments, and now includes a manual mapping
- * for known IDs that are not correctly resolved by the API.
+ * Automatically detects compartment names without manual mapping.
+ * Handles special cases like PaaS compartments and nested compartments.
  */
 const getCompartmentName = async (compartmentId) => {
     console.log(`🏢 [COMPARTMENT] Getting compartment name for ID: ${compartmentId}`);
-    
-    // Manual mapping for known issues
-    const manualMappings = {
-        'ocid1.compartment.oc1..aaaaaaaaln6a3g7t5f5i4a7z6f4q6c8r4s9b6e1r7e4i4g1h5a8h': 'DTC',
-        'ocid1.compartment.oc1..aaaaaaaay7g8g6m7c2e1f1h4z1y2h8n1s4t1o3i1e3s2t3a9f7d3a': 'CommonResources',
-        'ocid1.compartment.oc1..aaaaaaaanb7v6z2h4q2f4v2h2v4c1h6o3p9r2h4g1o6d2s3a2m3r4': 'GATRA',
-        'ocid1.compartment.oc1..aaaaaaaaeu2v3t8s1d3s9p2w8g3m3z6v7m3w4s5r7e4x4u9h4o4w6a': 'GDOT',
-        'ocid1.compartment.oc1..aaaaaaaacv2b4c1h4c9g4i2v2o6y1h6p3r4h2k1n4p1j3t2m3r1s3e': 'MART-PROD',
-        'ocid1.compartment.oc1..aaaaaaaacm6q1h6z2q2o1h3w2p3o4v1y4g2k2g4i1e3j2q3d2g4y1a': 'Vendors',
-        'ocid1.compartment.oc1..aaaaaaaagp6s2y9c2c2x9g3c2d4v8v2s4x7h3m4f2g5t3v1t6m2c2y': 'Transit',
-        'ocid1.compartment.oc1..aaaaaaaakv6v7w3x2m3k7h3h2k2x5h6x4p8v2m3m4e1s6w6t2d4t9e': 'TRANWARE'
-    };
-
-    if (manualMappings[compartmentId]) {
-        console.log(`✅ [COMPARTMENT] Found in manual mappings: ${manualMappings[compartmentId]}`);
-        return manualMappings[compartmentId];
-    }
     
     if (compartmentNameCache.has(compartmentId)) {
         const cachedName = compartmentNameCache.get(compartmentId);
@@ -120,141 +112,74 @@ const getCompartmentName = async (compartmentId) => {
 };
 
 /**
- * Enhanced Server Name Extraction
- * Updated to include new patterns for both queries and display names.
+ * ✅ OPTIMIZED: Fast Server Name Extraction
+ * Minimal logging for maximum performance
  */
-const extractVmInfo = async (alarm, instanceMap, instanceNameMap) => {
+const extractVmInfo = async (alarm, instanceMap) => {
     let vmId = null;
     let vmName = 'N/A';
     
-    console.log(`\n🔍 [VM_EXTRACT] =====================================`);
-    console.log(`🔍 [VM_EXTRACT] Processing alarm: ${alarm.displayName}`);
-    console.log(`🔍 [VM_EXTRACT] Alarm ID: ${alarm.id}`);
-    console.log(`🔍 [VM_EXTRACT] Alarm dimensions:`, JSON.stringify(alarm.dimensions, null, 2));
-    console.log(`🔍 [VM_EXTRACT] Alarm query:`, alarm.query);
-    console.log(`🔍 [VM_EXTRACT] Instance map size: ${instanceMap.size}`);
-    
     // Method 1: Check dimensions (most common) - try multiple possible keys
     if (alarm.dimensions && typeof alarm.dimensions === 'object') {
-        console.log(`🔍 [VM_EXTRACT] Method 1: Checking dimensions object...`);
-        const dimensionKeys = Object.keys(alarm.dimensions);
-        console.log(`🔍 [VM_EXTRACT] Available dimension keys: ${dimensionKeys.join(', ')}`);
-        
         vmId = alarm.dimensions.resourceId || 
                    alarm.dimensions.instanceId ||
                    alarm.dimensions.instance_id ||
                    alarm.dimensions.resourceName ||
                    alarm.dimensions.resource_id ||
                    alarm.dimensions.vmId;
-        
-        if (vmId) {
-            console.log(`✅ [VM_EXTRACT] Found vmId in dimensions: ${vmId}`);
-        } else {
-            console.log(`⚠️ [VM_EXTRACT] No vmId found in dimensions`);
-        }
-    } else {
-        console.log(`⚠️ [VM_EXTRACT] No dimensions object found or invalid type`);
     }
     
     // Method 2: Parse from query string - enhanced patterns
     if (!vmId && alarm.query) {
-        console.log(`🔍 [VM_EXTRACT] Method 2: Parsing query string...`);
-        console.log(`🔍 [VM_EXTRACT] Query to parse: ${alarm.query}`);
-        
-        // Try multiple regex patterns for different alarm query formats
         const patterns = [
-            { name: 'resourceId', pattern: /resourceId\s*=\s*"([^"]+)"/i },
-            { name: 'instanceId', pattern: /instanceId\s*=\s*"([^"]+)"/i },
-            { name: 'instance_id', pattern: /instance_id\s*=\s*"([^"]+)"/i },
-            { name: 'resourceName', pattern: /resourceName\s*=\s*"([^"]+)"/i },
-            { name: 'resource_id', pattern: /resource_id\s*=\s*"([^"]+)"/i },
-            { name: 'ocid_pattern', pattern: /(ocid1\.instance\.[a-zA-Z0-9\._-]+)/i },
-            { name: 'resourceDisplayName', pattern: /resourceDisplayName\s*=\s*"([^"]+)"/i }
+            /resourceId\s*=\s*"([^"]+)"/i,
+            /instanceId\s*=\s*"([^"]+)"/i,
+            /instance_id\s*=\s*"([^"]+)"/i,
+            /resourceName\s*=\s*"([^"]+)"/i,
+            /resource_id\s*=\s*"([^"]+)"/i,
+            /(ocid1\.instance\.[a-zA-Z0-9\._-]+)/i,
+            /resourceDisplayName\s*=\s*"([^"]+)"/i
         ];
         
-        for (const { name, pattern } of patterns) {
-            console.log(`🔍 [VM_EXTRACT] Trying pattern '${name}': ${pattern}`);
+        for (const pattern of patterns) {
             const match = alarm.query.match(pattern);
             if (match) {
                 vmId = match[1];
-                console.log(`✅ [VM_EXTRACT] Found vmId in query with pattern '${name}': ${vmId}`);
                 break;
-            } else {
-                console.log(`❌ [VM_EXTRACT] Pattern '${name}' did not match`);
             }
         }
-        
-        if (!vmId) {
-            console.log(`⚠️ [VM_EXTRACT] No vmId found in query after trying all patterns`);
-        }
-    } else if (!alarm.query) {
-        console.log(`⚠️ [VM_EXTRACT] No query string available for parsing`);
     }
     
     // Method 3: Check if alarm display name contains server names
     if (!vmId && alarm.displayName) {
-        console.log(`🔍 [VM_EXTRACT] Method 3: Checking alarm display name for server names...`);
         const serverNames = [
             'TURN-SERVER01', 'Graylog-01E', 'Graylog-01D', 'Graylog-01C', 
             'Graylog-01B', 'Graylog-01A', 'ITMSL-Disp360-SCRT', 'ITMSL-Disp360',
             'Portainer', 'METABASE-02', 'DB SOURCE'
         ];
         
-        console.log(`🔍 [VM_EXTRACT] Known server names to check: ${serverNames.join(', ')}`);
-        
         for (const serverName of serverNames) {
-            console.log(`🔍 [VM_EXTRACT] Checking if '${alarm.displayName}' contains '${serverName}'...`);
             if (alarm.displayName.toLowerCase().includes(serverName.toLowerCase())) {
                 vmName = serverName;
-                console.log(`✅ [VM_EXTRACT] Matched server name from alarm title: ${vmName}`);
                 break;
             }
-        }
-        
-        if (vmName === 'N/A') {
-            console.log(`⚠️ [VM_EXTRACT] No known server names found in alarm display name`);
         }
     }
     
     // Get VM name if we found an ID
     if (vmId) {
-        console.log(`🔍 [VM_EXTRACT] VM ID found, attempting to resolve name...`);
-        
         if (instanceMap.has(vmId)) {
             vmName = instanceMap.get(vmId);
-            console.log(`✅ [VM_EXTRACT] Found VM name in instance map: ${vmName}`);
         } else {
-            console.log(`⚠️ [VM_EXTRACT] VM ID not found in instance map, attempting direct API call...`);
-            // Try to fetch instance directly if not in map
-            try {
-                console.log(`📡 [VM_EXTRACT] Making direct API call for instance: ${vmId}`);
-                const instanceResponse = await computeClient.getInstance({ instanceId: vmId });
-                vmName = instanceResponse.instance.displayName;
-                console.log(`✅ [VM_EXTRACT] Directly fetched instance name: ${vmName}`);
-                
-                // Add to map for future use
-                instanceMap.set(vmId, vmName);
-                console.log(`💾 [VM_EXTRACT] Added instance to map for future use`);
-            } catch (err) {
-                console.log(`❌ [VM_EXTRACT] Could not fetch instance ${vmId}: ${err.message}`);
-                console.log(`❌ [VM_EXTRACT] Error stack:`, err.stack);
-                
-                // If vmId looks like an OCID, use a shortened version
-                if (vmId.startsWith('ocid1.')) {
-                    vmName = vmId.split('.').pop()?.substring(0, 10) || vmId;
-                    console.log(`🔧 [VM_EXTRACT] Using shortened OCID as name: ${vmName}`);
-                } else {
-                    vmName = vmId; // Use OCID as fallback
-                    console.log(`🔧 [VM_EXTRACT] Using full ID as name: ${vmName}`);
-                }
+            // ✅ OPTIMIZED: Skip direct API calls for performance - use vmId as fallback
+            if (vmId.includes('ocid1.instance')) {
+                const parts = vmId.split('.');
+                vmName = parts[parts.length - 1] || vmId;
+            } else {
+                vmName = vmId;
             }
         }
-    } else {
-        console.log(`⚠️ [VM_EXTRACT] No VM ID found through any method`);
     }
-    
-    console.log(`🔍 [VM_EXTRACT] Final result - VM ID: ${vmId || 'null'}, VM Name: ${vmName}`);
-    console.log(`🔍 [VM_EXTRACT] =====================================\n`);
     
     return { vmId, vmName };
 };
@@ -321,82 +246,83 @@ async function getOCIAlerts() {
         
         const alerts = [];
         
-        // 3. Process each alarm with enhanced extraction
-        console.log("🔄 [PROCESSING] =====================================");
-        console.log("🔄 [PROCESSING] Starting alarm processing loop...");
+        // 3. ✅ OPTIMIZED: Batch process alarms with parallel execution
+        console.log("🔄 [PROCESSING] Starting optimized alarm processing...");
         
-        for (let i = 0; i < alarmsResponse.items.length; i++) {
-            const alarm = alarmsResponse.items[i];
-            const alarmIndex = i + 1;
-            const totalAlarms = alarmsResponse.items.length;
+        // ✅ Create compartment cache to avoid repeated API calls
+        const compartmentCache = new Map();
+        
+        // ✅ Process alarms in parallel batches for better performance
+        const batchSize = 10; // Process 10 alarms at a time
+        const batches = [];
+        
+        for (let i = 0; i < alarmsResponse.items.length; i += batchSize) {
+            batches.push(alarmsResponse.items.slice(i, i + batchSize));
+        }
+        
+        console.log(`📊 [BATCH] Processing ${alarmsResponse.items.length} alarms in ${batches.length} batches of ${batchSize}`);
+        
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+            const batch = batches[batchIndex];
+            console.log(`🔄 [BATCH ${batchIndex + 1}/${batches.length}] Processing ${batch.length} alarms...`);
             
-            console.log(`\n🔄 [PROCESSING] [${alarmIndex}/${totalAlarms}] Processing alarm: ${alarm.displayName}`);
-            console.log(`🔄 [PROCESSING] [${alarmIndex}/${totalAlarms}] Alarm ID: ${alarm.id}`);
-            
-            try {
-                // Fetch alert history to get the precise firing timestamp
-                console.log(`📡 [HISTORY] [${alarmIndex}/${totalAlarms}] Fetching alarm history...`);
-                const alarmHistoryRequest = {
-                    alarmId: alarm.id
-                };
-                console.log(`📡 [HISTORY] [${alarmIndex}/${totalAlarms}] History request:`, JSON.stringify(alarmHistoryRequest, null, 2));
-                
-                const alarmHistoryResponse = await monitoringClient.listAlarmHistory(alarmHistoryRequest);
-                console.log(`✅ [HISTORY] [${alarmIndex}/${totalAlarms}] History API call completed`);
-                console.log(`📊 [HISTORY] [${alarmIndex}/${totalAlarms}] History items count: ${alarmHistoryResponse.items?.length || 0}`);
-                
-                const latestHistory = alarmHistoryResponse.items?.[0]?.historySummary;
-                if (latestHistory) {
-                    console.log(`📊 [HISTORY] [${alarmIndex}/${totalAlarms}] Latest history summary:`, JSON.stringify(latestHistory, null, 2));
-                } else {
-                    console.log(`⚠️ [HISTORY] [${alarmIndex}/${totalAlarms}] No history summary available`);
+            // ✅ Process batch in parallel
+            const batchPromises = batch.map(async (alarm, index) => {
+                try {
+                    // ✅ Fast VM extraction using cached instance map
+                    const { vmName } = await extractVmInfo(alarm, instanceMap);
+                    
+                    // ✅ Fast tenant extraction using cache
+                    let tenantName;
+                    if (compartmentCache.has(alarm.compartmentId)) {
+                        tenantName = compartmentCache.get(alarm.compartmentId);
+                    } else {
+                        tenantName = await getCompartmentName(alarm.compartmentId);
+                        compartmentCache.set(alarm.compartmentId, tenantName);
+                    }
+                    
+                    // ✅ Fast timestamp extraction
+                    const alertTimestamp = alarm.timeUpdated ? 
+                        new Date(alarm.timeUpdated).toISOString() : 
+                        alarm.timeCreated ? 
+                        new Date(alarm.timeCreated).toISOString() : 
+                        new Date().toISOString();
+                    
+                    const message = alarm.body || alarm.displayName;
+                    
+                    return {
+                        id: alarm.id,
+                        severity: alarm.severity.toLowerCase(),
+                        message: message,
+                        vm: vmName, 
+                        tenant: tenantName,
+                        region: provider.getRegion().regionId, 
+                        compartment: alarm.compartmentId,
+                        alertType: 'OCI_ALARM',
+                        metricName: alarm.metric,
+                        threshold: alarm.threshold,
+                        currentValue: undefined,
+                        unit: undefined,
+                        timestamp: alertTimestamp
+                    };
+                    
+                } catch (alarmError) {
+                    console.error(`❌ [BATCH ${batchIndex + 1}] Error processing alarm ${alarm.displayName}:`, alarmError.message);
+                    return null; // Skip failed alarms
                 }
-                
-                // Extract VM and tenant information
-                console.log(`🔍 [EXTRACT] [${alarmIndex}/${totalAlarms}] Extracting VM information...`);
-                const { vmName } = await extractVmInfo(alarm, instanceMap);
-                console.log(`✅ [EXTRACT] [${alarmIndex}/${totalAlarms}] VM extraction completed: ${vmName}`);
-                
-                console.log(`🏢 [EXTRACT] [${alarmIndex}/${totalAlarms}] Extracting tenant information...`);
-                const tenantName = await getCompartmentName(alarm.compartmentId);
-                console.log(`✅ [EXTRACT] [${alarmIndex}/${totalAlarms}] Tenant extraction completed: ${tenantName}`);
-
-                const alertTimestamp = latestHistory?.timestamp || alarm.timeUpdated || alarm.timeCreated;
-                console.log(`⏰ [TIMESTAMP] [${alarmIndex}/${totalAlarms}] Alert timestamp: ${alertTimestamp}`);
-                
-                const message = latestHistory?.summary || alarm.body || alarm.displayName;
-                console.log(`📝 [MESSAGE] [${alarmIndex}/${totalAlarms}] Alert message: ${message}`);
-                
-                const alertData = {
-                    id: alarm.id,
-                    severity: alarm.severity.toLowerCase(),
-                    message: message,
-                    vm: vmName, 
-                    tenant: tenantName,
-                    region: provider.getRegion().regionId, 
-                    compartment: alarm.compartmentId,
-                    alertType: 'OCI_ALARM',
-                    metricName: alarm.metric,
-                    threshold: alarm.threshold,
-                    currentValue: latestHistory?.namespaceId ? latestHistory.datum?.value : undefined,
-                    unit: latestHistory?.datum?.unit,
-                    timestamp: alertTimestamp
-                };
-                
-                alerts.push(alertData);
-                
-                console.log(`✅ [ALERT] [${alarmIndex}/${totalAlarms}] Alert created successfully:`);
-                console.log(`📊 [ALERT] [${alarmIndex}/${totalAlarms}] Alert data:`, JSON.stringify(alertData, null, 2));
-                console.log(`📈 [PROGRESS] [${alarmIndex}/${totalAlarms}] Progress: ${((alarmIndex / totalAlarms) * 100).toFixed(1)}%`);
-                
-            } catch (alarmError) {
-                console.error(`❌ [ERROR] [${alarmIndex}/${totalAlarms}] Error processing alarm ${alarm.displayName}:`, alarmError.message);
-                console.error(`❌ [ERROR] [${alarmIndex}/${totalAlarms}] Error stack:`, alarmError.stack);
-                
-                // Don't create fake error alerts - just log the error and continue
-                // This ensures only real Oracle data gets through to the frontend
-                console.log(`⚠️ [SKIP] [${alarmIndex}/${totalAlarms}] Skipping failed alarm, continuing with next one`);
-            }
+            });
+            
+            // ✅ Wait for batch to complete
+            const batchResults = await Promise.all(batchPromises);
+            
+            // ✅ Add successful results to alerts array
+            batchResults.forEach(result => {
+                if (result) {
+                    alerts.push(result);
+                }
+            });
+            
+            console.log(`✅ [BATCH ${batchIndex + 1}/${batches.length}] Completed - ${batchResults.filter(r => r).length} alerts processed`);
         }
 
         console.log("\n🔄 [PROCESSING] =====================================");

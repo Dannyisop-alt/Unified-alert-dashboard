@@ -17,7 +17,7 @@ const Index = () => {
   });
   const [filters, setFilters] = useState<AlertFilters>({
     severity: [],
-    source: [], // Start with all sources
+    source: ['Application Heartbeat'], // Start with heartbeat source to prevent showing all alerts initially
     channel: [],
     timeRange: '24h',
     searchText: '',
@@ -99,18 +99,41 @@ const Index = () => {
 
   // Save preferences and update source filter when category changes
   const handleCategoryChange = (category: AlertCategory) => {
+    console.log(`🔄 [DEBUG] Switching to category: ${category}`);
+    
+    const sourceMap: Record<AlertCategory, string> = {
+      'heartbeat': 'Application Heartbeat',
+      'logs': 'Application Logs',
+      'infrastructure': 'Infrastructure Alerts',
+      'database': 'Infrastructure Alerts'
+    };
+    
+    const newSource = [sourceMap[category!]];
+    
+    // ✅ CRITICAL: Update filters FIRST (prevents race condition)
+    setFilters(prev => ({ 
+      ...prev, 
+      source: newSource,
+      // Reset ALL other filters to prevent contamination
+      severity: [],
+      channel: [],
+      searchText: '',
+      dynamicFilter: 'ALL',
+      region: undefined,
+      // ✅ FIX: Set resourceType filter for database category
+      resourceType: category === 'database' ? 'Database' : undefined,
+      timeRange: '24h'
+    }));
+    
+    // Then update category
     setSelectedCategory(category);
+    
+    // Save preferences
     const newPreferences = { ...userPreferences, defaultCategory: category || 'heartbeat' };
     setUserPreferences(newPreferences);
     localStorage.setItem('userPreferences', JSON.stringify(newPreferences));
     
-    // Auto-select corresponding source
-    const sourceMap = {
-      'heartbeat': 'Application Heartbeat',
-      'logs': 'Application Logs',
-      'infrastructure': 'Infrastructure Alerts'
-    };
-    setFilters(prev => ({ ...prev, source: [sourceMap[category!]] }));
+    console.log(`✅ [DEBUG] Category change complete: ${category} with source: ${newSource}, resourceType: ${category === 'database' ? 'Database' : 'undefined'}`);
   };
 
   // Calculate critical alert counts only
@@ -143,6 +166,7 @@ const Index = () => {
         {/* Main Content */}
         <main className="container mx-auto px-6 py-6">
           <MonitoringDashboard 
+            key={`${selectedCategory}-${filters.source?.join(',') || 'none'}`} // ✅ FORCE REMOUNT
             selectedCategory={selectedCategory} 
             filters={filters} 
             onFiltersChange={setFilters}

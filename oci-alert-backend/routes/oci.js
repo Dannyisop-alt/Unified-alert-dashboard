@@ -1,140 +1,136 @@
-// routes/oci.js
+// routes/oci.js - Simplified version without database storage
 const express = require('express');
 const router = express.Router();
-const OCIAlert = require('../models/OciAlert');
 const { getOCIAlerts } = require('../services/ociService');
 
-// This is the new endpoint to trigger the pull and save process.
-// Your frontend can call this periodically or on user request.
-router.post('/pull', async (req, res) => {
-  try {
-    console.log('Manually pulling OCI alerts...');
-    const ociAlerts = await getOCIAlerts();
-    
-    // Iterate through the alerts and save them to the database
-    const savedAlerts = [];
-    for (const alertData of ociAlerts) {
-      // Check for a duplicate to prevent saving the same alert multiple times
-      const existingAlert = await OCIAlert.findOne({ 
-        message: alertData.message,
-        vm: alertData.vm,
-        timestamp: alertData.timestamp
-      });
-      
-      if (!existingAlert) {
-        const newAlert = new OCIAlert(alertData);
-        await newAlert.save();
-        savedAlerts.push(newAlert);
-      }
-    }
-    
-    console.log(`Successfully pulled and saved ${savedAlerts.length} new OCI alerts.`);
-    res.status(200).json({ 
-      message: `Pulled and saved ${savedAlerts.length} new OCI alerts`,
-      newAlerts: savedAlerts 
-    });
-    
-  } catch (error) {
-    console.error('Error in OCI alert pull route:', error);
-    res.status(500).json({ error: 'Failed to pull and save OCI alerts' });
-  }
-});
-
-// Original GET alerts with filtering
+// Direct OCI fetch endpoint - no database storage
 router.get('/', async (req, res) => {
   try {
+    console.log('🔄 Fetching active alerts directly from OCI...');
+    
+    // Fetch fresh alerts directly from OCI
+    const ociAlerts = await getOCIAlerts();
+    console.log(`📊 Fetched ${ociAlerts.length} active alerts from OCI`);
+    
+    // Apply filters from query parameters
     const { 
       severity, 
       vm, 
       tenant, 
       region, 
       alertType,
-      limit = 100 
+      limit
     } = req.query;
     
-    let query = {};
+    let filteredAlerts = ociAlerts;
     
     if (severity && severity !== 'all') {
-      query.severity = severity;
+      filteredAlerts = filteredAlerts.filter(alert => 
+        alert.severity.toLowerCase() === severity.toLowerCase()
+      );
     }
+    
     if (vm && vm !== 'all') {
-      query.vm = vm;
+      filteredAlerts = filteredAlerts.filter(alert => 
+        alert.vm && alert.vm.toLowerCase().includes(vm.toLowerCase())
+      );
     }
+    
     if (tenant && tenant !== 'all') {
-      query.tenant = tenant;
+      filteredAlerts = filteredAlerts.filter(alert => 
+        alert.tenant && alert.tenant.toLowerCase() === tenant.toLowerCase()
+      );
     }
+    
     if (region && region !== 'all') {
-      query.region = region;
+      filteredAlerts = filteredAlerts.filter(alert => 
+        alert.region && alert.region.toLowerCase() === region.toLowerCase()
+      );
     }
+    
     if (alertType && alertType !== 'all') {
-      query.alertType = alertType;
+      filteredAlerts = filteredAlerts.filter(alert => 
+        alert.alertType && alert.alertType.toLowerCase() === alertType.toLowerCase()
+      );
     }
-
-    const alerts = await OCIAlert.find(query)
-      .sort({ timestamp: -1 })
-      .limit(parseInt(limit));
-      
-    res.json(alerts);
+    
+    // Apply limit if specified
+    if (limit && parseInt(limit) > 0) {
+      filteredAlerts = filteredAlerts.slice(0, parseInt(limit));
+    }
+    
+    console.log(`✅ Returning ${filteredAlerts.length} filtered alerts (limit: ${limit || 'none'})`);
+    res.json(filteredAlerts);
+    
   } catch (error) {
-    console.error('Error fetching OCI alerts:', error);
+    console.error('❌ Error fetching OCI alerts:', error);
     res.status(500).json({ error: 'Failed to fetch OCI alerts' });
   }
 });
 
-// Original PUT endpoint to mark alert as read
+// Keep the pull endpoint for manual refresh (but don't save to DB)
+router.post('/pull', async (req, res) => {
+  try {
+    console.log('🔄 Manual pull triggered - fetching fresh alerts from OCI...');
+    const ociAlerts = await getOCIAlerts();
+    
+    console.log(`✅ Pull completed: ${ociAlerts.length} active alerts fetched from OCI`);
+    res.status(200).json({ 
+      message: `Successfully pulled ${ociAlerts.length} active alerts from OCI`,
+      alerts: ociAlerts,
+      count: ociAlerts.length
+    });
+    
+  } catch (error) {
+    console.error('Error in OCI alert pull route:', error);
+    res.status(500).json({ error: 'Failed to pull OCI alerts' });
+  }
+});
+
+// Get unique values for filters directly from OCI data
+router.get('/filters', async (req, res) => {
+  try {
+    console.log('🔄 Fetching filter options from OCI...');
+    const ociAlerts = await getOCIAlerts();
+    
+    // Extract unique values from the fresh OCI data
+    const vms = [...new Set(ociAlerts.map(alert => alert.vm).filter(Boolean))];
+    const tenants = [...new Set(ociAlerts.map(alert => alert.tenant).filter(Boolean))];
+    const regions = [...new Set(ociAlerts.map(alert => alert.region).filter(Boolean))];
+    const alertTypes = [...new Set(ociAlerts.map(alert => alert.alertType).filter(Boolean))];
+    const severities = [...new Set(ociAlerts.map(alert => alert.severity).filter(Boolean))];
+
+    console.log(`✅ Filter options: ${vms.length} VMs, ${tenants.length} tenants, ${regions.length} regions`);
+    res.json({
+      vms,
+      tenants,
+      regions,
+      alertTypes,
+      severities
+    });
+    
+  } catch (error) {
+    console.error('Error fetching filter options:', error);
+    res.status(500).json({ error: 'Failed to fetch filter options' });
+  }
+});
+
+// Keep read/acknowledge endpoints for compatibility (but they won't persist)
 router.put('/:id/read', async (req, res) => {
   try {
-    const alert = await OCIAlert.findByIdAndUpdate(
-      req.params.id,
-      { read: req.body.read },
-      { new: true }
-    );
-    res.json(alert);
+    // Since we're not storing in DB, just return success
+    res.json({ message: 'Alert marked as read (not persisted)' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update alert' });
   }
 });
 
-// ➡️ NEW: PUT endpoint to mark alert as acknowledged
 router.put('/:id/acknowledge', async (req, res) => {
   try {
-    const { id } = req.params;
-    const alert = await OCIAlert.findByIdAndUpdate(id, { acknowledged: true }, { new: true });
-    if (!alert) {
-      return res.status(404).json({ message: 'Alert not found.' });
-    }
-    res.status(200).json(alert);
+    // Since we're not storing in DB, just return success
+    res.json({ message: 'Alert acknowledged (not persisted)' });
   } catch (error) {
-    console.error('Error marking alert as acknowledged:', error);
-    res.status(500).json({
-      message: 'Failed to mark alert as acknowledged.',
-      error: error.message,
-    });
-  }
-});
-
-
-// Original GET unique values for filters
-router.get('/filters', async (req, res) => {
-  try {
-    const [vms, tenants, regions, alertTypes, severities] = await Promise.all([
-      OCIAlert.distinct('vm'),
-      OCIAlert.distinct('tenant'),
-      OCIAlert.distinct('region'),
-      OCIAlert.distinct('alertType'),
-      OCIAlert.distinct('severity')
-    ]);
-
-    res.json({
-      vms: vms.filter(Boolean),
-      tenants: tenants.filter(Boolean),
-      regions: regions.filter(Boolean),
-      alertTypes: alertTypes.filter(Boolean),
-      severities: severities.filter(Boolean)
-    });
-  } catch (error) {
-    console.error('Error fetching filter options:', error);
-    res.status(500).json({ error: 'Failed to fetch filter options' });
+    res.status(500).json({ error: 'Failed to acknowledge alert' });
   }
 });
 

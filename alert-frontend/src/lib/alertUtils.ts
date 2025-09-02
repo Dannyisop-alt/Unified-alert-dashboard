@@ -7,98 +7,64 @@ export const processAlerts = (
   heartbeatAlerts: HeartbeatAlert[],
   filters: AlertFilters
 ): ProcessedAlert[] => {
+  
+  console.log('🔍 [PROCESS] Starting alert processing...');
+  console.log('🔍 [PROCESS] Input counts - Graylog:', graylogAlerts.length, 'OCI:', ociAlerts.length, 'Heartbeat:', heartbeatAlerts.length);
+  console.log('🔍 [PROCESS] Active source filters:', filters.source);
+
+  // ✅ CRITICAL: Return empty immediately if no source filters
+  if (!filters.source || filters.source.length === 0) {
+    console.log('⚠️ [PROCESS] No source filter provided - returning empty array');
+    return [];
+  }
+
   const processedAlerts: ProcessedAlert[] = [];
 
+  // ✅ STRICT: Only process alerts that match current source filters
+  const shouldProcessGraylog = filters.source.includes('Application Logs');
+  const shouldProcessOCI = filters.source.includes('Infrastructure Alerts');
+  const shouldProcessHeartbeat = filters.source.includes('Application Heartbeat');
+
+  console.log('🔍 [PROCESS] Processing flags - Graylog:', shouldProcessGraylog, 'OCI:', shouldProcessOCI, 'Heartbeat:', shouldProcessHeartbeat);
+
   // Helper: Determine if an OCI alert is database-related
+  // ✅ FIXED: Only match alerts that contain "DB" or "DATABASE" words
   const isDatabaseAlert = (alert: OCIAlert): boolean => {
     const vmName = (alert.vm || '').toLowerCase();
     const message = (alert.message || '').toLowerCase();
     const metricName = (alert.metricName || '').toLowerCase();
     const alertType = (alert.alertType || '').toLowerCase();
     
-    // Database-related VM name patterns
-    const dbVmPatterns = [
-      'db', 'database', 'sql', 'oracle', 'mysql', 'postgres', 'mongo', 'redis',
-      'dbspc', 'db-prod', 'db-dev', 'db-stage', 'db-test', 'db-uat',
-      'oracle-db', 'mysql-db', 'postgres-db', 'mongo-db', 'redis-db',
-      'gatra', 'gatra-db', 'gatra_prod', 'gatra_dev', 'gatra_stage'
+    // ✅ STRICT: Only check for explicit "DB" or "DATABASE" patterns
+    const dbPatterns = [
+      'db', 'database', 'db_', '_db', 'db-', '-db'
     ];
     
-    // Database-related message patterns
-    const dbMessagePatterns = [
-      'database', 'db', 'sql', 'oracle', 'mysql', 'postgres', 'mongo', 'redis',
-      'connection pool', 'query timeout', 'deadlock', 'lock wait',
-      'buffer cache', 'shared pool', 'data file', 'tablespace',
-      'index', 'table scan', 'full table scan', 'partition',
-      'backup', 'recovery', 'archive', 'redo log', 'undo',
-      'performance', 'slow query', 'execution plan', 'statistics',
-      'sessions', 'session', 'connection', 'query', 'transaction',
-      'lock', 'wait', 'timeout', 'pool', 'cache', 'buffer',
-      'iops', 'throughput', 'latency', 'response time'
-    ];
-    
-    // Database-related metric patterns
-    const dbMetricPatterns = [
-      'database', 'db', 'sql', 'oracle', 'mysql', 'postgres', 'mongo', 'redis',
-      'connection', 'session', 'query', 'transaction', 'lock',
-      'buffer', 'cache', 'memory', 'storage', 'iops',
-      'cpu_utilization', 'memory_utilization', 'storage_utilization',
-      'active_sessions', 'total_sessions', 'wait_time', 'sessions',
-      'gatra', 'gatra_sessions', 'gatra_sessions_alert',
-      'connection_count', 'session_count', 'query_count',
-      'transaction_count', 'lock_count', 'wait_count',
-      'buffer_hit_ratio', 'cache_hit_ratio', 'memory_usage',
-      'storage_usage', 'iops_count', 'throughput_rate',
-      'latency_ms', 'response_time_ms'
-    ];
-    
-    // Check VM name patterns
-    if (dbVmPatterns.some(pattern => vmName.includes(pattern))) {
+    // Check VM name for DB patterns
+    if (dbPatterns.some(pattern => vmName.includes(pattern))) {
       return true;
     }
     
-    // Check message patterns
-    if (dbMessagePatterns.some(pattern => message.includes(pattern))) {
+    // Check message for DB patterns
+    if (dbPatterns.some(pattern => message.includes(pattern))) {
       return true;
     }
     
-    // Check metric name patterns
-    if (dbMetricPatterns.some(pattern => metricName.includes(pattern))) {
+    // Check metric name for DB patterns
+    if (dbPatterns.some(pattern => metricName.includes(pattern))) {
       return true;
     }
     
-    // Check for specific database error patterns
-    if (message.includes('ora-') || message.includes('mysql error') || 
-        message.includes('postgres error') || message.includes('connection failed') ||
-        message.includes('session') || message.includes('connection') ||
-        message.includes('query') || message.includes('transaction')) {
+    // Check alert type for DB patterns
+    if (dbPatterns.some(pattern => alertType.includes(pattern))) {
       return true;
     }
     
-    // Check for GATRA-specific patterns (common in your system)
-    if (vmName.includes('gatra') || message.includes('gatra') || metricName.includes('gatra')) {
-      return true;
-    }
-    
-    // Check for session-related patterns
-    if (message.includes('sessions') || message.includes('session') || 
-        metricName.includes('sessions') || metricName.includes('session')) {
-      return true;
-    }
-    
-    // Check for common database performance indicators
-    if (message.includes('high cpu') || message.includes('high memory') || 
-        message.includes('high iops') || message.includes('high throughput') ||
-        message.includes('slow response') || message.includes('timeout') ||
-        message.includes('connection limit') || message.includes('pool exhausted')) {
-      return true;
-    }
-    
-    // Check for database-specific alert names
-    if (alertType.includes('sessions') || alertType.includes('connection') ||
-        alertType.includes('query') || alertType.includes('transaction') ||
-        alertType.includes('lock') || alertType.includes('wait') ||
-        alertType.includes('performance') || alertType.includes('throughput')) {
+    // ✅ SPECIFIC: Check for known database alert patterns in your system
+    if (message.includes('pht_database_session_alarm') || 
+        message.includes('gatra_sessions_alert') ||
+        message.includes('dtc-db_alert') ||
+        message.includes('qrydedb_')) {
       return true;
     }
     
@@ -128,123 +94,161 @@ export const processAlerts = (
     return 'Info'; // Default for logs and heartbeat
   };
 
-  // Process Graylog alerts
-  graylogAlerts.forEach((alert) => {
-    const source: 'Application Logs' = 'Application Logs';
-    const severity = mapSeverity(alert.severity, source);
+  // Process Graylog alerts ONLY for Application Logs
+  if (shouldProcessGraylog && graylogAlerts.length > 0) {
+    console.log('📋 [PROCESS] Processing', graylogAlerts.length, 'Graylog alerts for Application Logs');
+    graylogAlerts.forEach((alert, index) => {
+      const source: 'Application Logs' = 'Application Logs';
+      const severity = mapSeverity(alert.severity, source);
 
-    // Determine category based on channel
-    let category: 'heartbeat' | 'logs' | 'infrastructure' = 'logs';
-    if (alert.channel?.includes('heartbeat') || alert.channel?.includes('monitor')) {
-      category = 'heartbeat';
-    } else if (alert.channel?.includes('infrastructure') || alert.channel?.includes('system')) {
-      category = 'infrastructure';
-    }
-
-    processedAlerts.push({
-      id: alert._id || `graylog-${alert.timestamp}`,
-      source,
-      severity,
-      title: alert.shortMessage || 'No title',
-      description: alert.fullMessage || alert.shortMessage || 'No description',
-      timestamp: alert.timestamp,
-      category
-    });
-  });
-
-  // Process OCI alerts
-  ociAlerts.forEach((alert) => {
-    const source: 'Infrastructure Alerts' = 'Infrastructure Alerts';
-    const severity = mapSeverity(alert.severity, source);
-
-    // Extract the actual alert message/title from the message field
-    let alertTitle = alert.message || 'No title available';
-    
-    // If message contains "Processing Error" or similar, try to extract meaningful info
-    if (alertTitle.includes('Processing Error') || alertTitle.includes('OCI_ALARM_ERROR') || alertTitle.includes('Failed to process')) {
-      // Try to use metricName or alertType if available
-      if (alert.metricName && alert.metricName !== 'Unknown' && alert.metricName !== 'ProcessingError') {
-        alertTitle = alert.metricName;
-      } else if (alert.alertType && alert.alertType !== 'OCI_ALARM' && alert.alertType !== 'OCI_ALARM_ERROR') {
-        alertTitle = alert.alertType;
-      } else {
-        // Fallback to a more descriptive title
-        alertTitle = `Alert on ${alert.vm}`;
+      let category: 'heartbeat' | 'logs' | 'infrastructure' = 'logs';
+      if (alert.channel?.includes('heartbeat') || alert.channel?.includes('monitor')) {
+        category = 'heartbeat';
+      } else if (alert.channel?.includes('infrastructure') || alert.channel?.includes('system')) {
+        category = 'infrastructure';
       }
-    }
-    
-    // Clean up the title if it's too long or contains unnecessary information
-    if (alertTitle.length > 100) {
-      alertTitle = alertTitle.substring(0, 97) + '...';
-    }
-    
-    // Remove common prefixes that don't add value
-    alertTitle = alertTitle.replace(/^(OCI_|ALARM_|ERROR_)/i, '');
 
-    // Determine resource type and category
-    const isDatabase = isDatabaseAlert(alert);
-    const resourceType: 'Database' | 'Server' = isDatabase ? 'Database' : 'Server';
-    const category: 'infrastructure' | 'database' = isDatabase ? 'database' : 'infrastructure';
-    
-    // Debug logging for categorization
-    console.log(`🔍 [CATEGORIZATION] Alert: ${alert.vm} - "${alert.message}"`);
-    console.log(`🔍 [CATEGORIZATION] Metric: ${alert.metricName}, Type: ${alert.alertType}`);
-    console.log(`🔍 [CATEGORIZATION] Categorized as: ${resourceType} (${category})`);
-    console.log(`🔍 [CATEGORIZATION] Database detection: ${isDatabase}`);
+      const processedAlert = {
+        id: alert._id || `graylog-${alert.timestamp}-${index}`, // Ensure unique IDs
+        source,
+        severity,
+        title: alert.shortMessage || 'No title',
+        description: alert.fullMessage || alert.shortMessage || 'No description',
+        timestamp: alert.timestamp,
+        category
+      };
 
-    processedAlerts.push({
-      id: alert._id || `oci-${alert.timestamp}`,
-      source,
-      severity,
-      title: alertTitle,
-      description: alert.message || 'No description available',
-      timestamp: alert.timestamp,
-      site: alert.vm,
-      
-      category: category,
-      region: alert.region,
-      compartment: alert.compartment,
-      metricName: alert.metricName,
-      tenant: alert.tenant,
-      resourceType: resourceType
+      processedAlerts.push(processedAlert);
+      console.log(`📋 [PROCESS] Added Graylog alert: ${processedAlert.title}`);
     });
-  });
+  } else if (shouldProcessGraylog) {
+    console.log('📋 [PROCESS] Should process Graylog but no alerts provided');
+  }
 
-  // Process Heartbeat alerts
-  heartbeatAlerts.forEach((alert) => {
-    const source: 'Application Heartbeat' = 'Application Heartbeat';
-    const severity = mapSeverity(alert.severity, source);
+  // Process OCI alerts ONLY for Infrastructure Alerts  
+  if (shouldProcessOCI && ociAlerts.length > 0) {
+    console.log('🏗️ [PROCESS] Processing', ociAlerts.length, 'OCI alerts for Infrastructure Alerts');
+    ociAlerts.forEach((alert, index) => {
+      const source: 'Infrastructure Alerts' = 'Infrastructure Alerts';
+      const severity = mapSeverity(alert.severity, source);
 
-    processedAlerts.push({
-      id: alert.id,
-      source,
-      severity,
-      title: `${alert.siteName} - ${alert.service}`,
-      description: alert.message,
-      timestamp: alert.timestamp,
-      site: alert.site,
+      // Clean up alert title
+      let alertTitle = alert.message || 'No title available';
       
-      services: [{
-        name: alert.service,
-        status: alert.status === 'GREEN' ? 'OK' : alert.status === 'ORANGE' ? 'WARN' : 'ERR'
-      }],
-      category: 'heartbeat'
+      if (alertTitle.includes('Processing Error') || alertTitle.includes('OCI_ALARM_ERROR')) {
+        if (alert.metricName && alert.metricName !== 'Unknown') {
+          alertTitle = alert.metricName;
+        } else if (alert.alertType && alert.alertType !== 'OCI_ALARM') {
+          alertTitle = alert.alertType;
+        } else {
+          alertTitle = `Alert on ${alert.vm}`;
+        }
+      }
+      
+      if (alertTitle.length > 100) {
+        alertTitle = alertTitle.substring(0, 97) + '...';
+      }
+      
+      alertTitle = alertTitle.replace(/^(OCI_|ALARM_|ERROR_)/i, '');
+
+      const isDatabase = isDatabaseAlert(alert);
+      const resourceType: 'Database' | 'Server' = isDatabase ? 'Database' : 'Server';
+      const category: 'infrastructure' | 'database' = isDatabase ? 'database' : 'infrastructure';
+
+      const processedAlert = {
+        id: alert._id || `oci-${alert.timestamp}-${index}`, // Ensure unique IDs
+        source, // ✅ MUST be 'Infrastructure Alerts'
+        severity,
+        title: alertTitle,
+        description: alert.message || 'No description available',
+        timestamp: alert.timestamp,
+        site: alert.vm,
+        category: category,
+        region: alert.region,
+        compartment: alert.compartment,
+        metricName: alert.metricName,
+        tenant: alert.tenant,
+        resourceType: resourceType
+      };
+
+      processedAlerts.push(processedAlert);
+      console.log(`🏗️ [PROCESS] Added Infrastructure alert: ${processedAlert.title}`);
     });
+  } else if (shouldProcessOCI) {
+    console.log('🏗️ [PROCESS] Should process OCI but no alerts provided');
+  }
+
+  // Process Heartbeat alerts ONLY for Application Heartbeat
+  if (shouldProcessHeartbeat && heartbeatAlerts.length > 0) {
+    console.log('💓 [PROCESS] Processing', heartbeatAlerts.length, 'Heartbeat alerts for Application Heartbeat');
+    heartbeatAlerts.forEach((alert, index) => {
+      const source: 'Application Heartbeat' = 'Application Heartbeat';
+      const severity = mapSeverity(alert.severity, source);
+
+      const processedAlert = {
+        id: alert.id || `heartbeat-${alert.timestamp}-${index}`, // Ensure unique IDs
+        source,
+        severity,
+        title: `${alert.siteName} - ${alert.service}`,
+        description: alert.message,
+        timestamp: alert.timestamp,
+        site: alert.site,
+        services: [{
+          name: alert.service,
+          status: alert.status === 'GREEN' ? 'OK' as const : alert.status === 'ORANGE' ? 'WARN' as const : 'ERR' as const
+        }],
+        category: 'heartbeat' as const
+      };
+
+      processedAlerts.push(processedAlert);
+      console.log(`💓 [PROCESS] Added Heartbeat alert: ${processedAlert.title}`);
+    });
+  } else if (shouldProcessHeartbeat) {
+    console.log('💓 [PROCESS] Should process Heartbeat but no alerts provided');
+  }
+
+  console.log('✅ [PROCESS] Total processed alerts:', processedAlerts.length);
+  
+  // ✅ VALIDATION: Check that all alerts have correct sources
+  const sourceDistribution = processedAlerts.reduce((acc, alert) => {
+    acc[alert.source] = (acc[alert.source] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  console.log('✅ [PROCESS] Source distribution:', sourceDistribution);
+
+  // ✅ DETECT CONTAMINATION
+  processedAlerts.forEach(alert => {
+    if (!filters.source.includes(alert.source)) {
+      console.error('🚨 [CONTAMINATION] Alert with wrong source detected:', {
+        title: alert.title,
+        source: alert.source,
+        expectedSources: filters.source
+      });
+    }
   });
 
   // Apply filters
   let filteredAlerts = processedAlerts;
 
   if (filters.severity?.length > 0) {
+    const beforeCount = filteredAlerts.length;
     filteredAlerts = filteredAlerts.filter(alert => 
       filters.severity.includes(alert.severity)
     );
+    console.log(`🔍 [FILTER] Severity filter: ${beforeCount} → ${filteredAlerts.length}`);
   }
 
+  // ✅ Source filter should be redundant now, but keep as safety
   if (filters.source?.length > 0) {
-    filteredAlerts = filteredAlerts.filter(alert => 
-      filters.source.includes(alert.source)
-    );
+    const beforeCount = filteredAlerts.length;
+    filteredAlerts = filteredAlerts.filter(alert => {
+      const isAllowed = filters.source.includes(alert.source);
+      if (!isAllowed) {
+        console.error(`🚨 [LEAK] Alert leaked through: ${alert.title} (source: ${alert.source})`);
+      }
+      return isAllowed;
+    });
+    console.log(`🔒 [FILTER] Source safety filter: ${beforeCount} → ${filteredAlerts.length}`);
   }
 
   if (filters.channel?.length > 0) {
@@ -344,7 +348,10 @@ export const processAlerts = (
   }
 
   // Sort by timestamp (newest first)
-  return filteredAlerts.sort((a, b) => 
+  const sortedAlerts = filteredAlerts.sort((a, b) => 
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
+
+  console.log('✅ [PROCESS] Final result:', sortedAlerts.length, 'alerts');
+  return sortedAlerts;
 };
