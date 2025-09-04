@@ -107,6 +107,8 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
     }
   }, [selectedCategory, filters.source?.join(',')]); // Separate fetch effect
 
+  // Graylog alerts are now fetched via polling in the main fetch effect
+
   // ✅ Remove the polling effect entirely to prevent contamination
   // The refresh will be manual only
 

@@ -24,8 +24,10 @@ export interface HeartbeatAlert {
 class HeartbeatService {
   private config = {
     wsUrl: 'wss://hbc.hbssweb.com:4950',
-    timeout: 10000,
-    debug: true
+    timeout: 15000, // Increased timeout
+    debug: true,
+    maxRetries: 2,
+    retryDelay: 3000
   };
 
   private isErrorStatus = (status: string): boolean => {
@@ -143,20 +145,23 @@ class HeartbeatService {
           clearTimeout(timeoutId);
           if (!dataReceived && !connectionError) {
             console.error('❌ Heartbeat WebSocket error:', error);
-            reject(new Error('Heartbeat WebSocket error'));
+            // Return empty array instead of rejecting to prevent breaking the UI
+            resolve([]);
           }
         };
 
         ws.onclose = () => {
           clearTimeout(timeoutId);
           if (!dataReceived && !connectionError) {
-            reject(new Error('Heartbeat WebSocket closed unexpectedly'));
+            // Return empty array instead of rejecting to prevent breaking the UI
+            resolve([]);
           }
         };
 
       } catch (error) {
         console.error('❌ Failed to create heartbeat WebSocket:', error);
-        reject(new Error('Failed to create heartbeat WebSocket'));
+        // Return empty array instead of rejecting to prevent breaking the UI
+        resolve([]);
       }
     });
   }

@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const path = require('path');
@@ -15,7 +14,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Import routes
 const ociRoutes = require('./routes/oci');
 const graylogRoutes = require('./routes/graylog');
 const authRoutes = require('./routes/auth');
@@ -24,21 +23,32 @@ const { authenticateJWT } = require('./utils/authMiddleware');
 // Auth routes (unprotected)
 app.use('/auth', authRoutes);
 
+// Graylog alerts (unprotected - no auth required)
+app.use('/graylog-alerts', graylogRoutes);
+
 // Protected routes
 app.use('/oci-alerts', authenticateJWT, ociRoutes);
-app.use('/graylog-alerts', authenticateJWT, graylogRoutes);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    mode: 'Memory List Storage',
+    storage: 'Unlimited Memory List',
+    resetSchedule: 'Daily at 12:05 AM'
+  });
+});
 
 // Root test
 app.get('/', (req, res) => res.send('🚀 Server is up and running'));
 
-// Mongo connection
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('✅ Connected to MongoDB');
-    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-  })
-  .catch((error) => console.error('❌ MongoDB connection error:', error));
+// Start server (no MongoDB dependency)
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📋 Memory list storage enabled`);
+  console.log(`🕐 Daily reset scheduled for 12:05 AM`);
+});
 
 // Initialize SQLite database for auth - CHANGED TO users.sqlite
 const sqliteDbPath = process.env.SQLITE_DB_PATH || path.join(__dirname, 'users.sqlite');
@@ -121,3 +131,33 @@ sqliteDb.serialize(() => {
 
 // Expose db to routes via app locals
 app.locals.sqliteDb = sqliteDb;
+
+// DEBUG: Reset admin user endpoint
+app.post('/debug/reset-admin', async (req, res) => {
+  try {
+    const hashedPassword = await bcrypt.hash('Highwaterfa11s@2912#V', 10);
+
+    sqliteDb.run(
+      'DELETE FROM ALERTS_USERPROFILE WHERE USER_ID = ?',
+      ['himalhotra751@gmail.com'],
+      (err) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+
+        sqliteDb.run(
+          'INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE) VALUES (?, ?, ?, ?)',
+          ['himalhotra751@gmail.com', hashedPassword, 'Infrastructure Alerts,Application Logs,Application Heartbeat', 'admin'],
+          (err) => {
+            if (err) {
+              return res.status(500).json({ error: err.message });
+            }
+            res.json({ message: 'Admin user reset successfully', password: 'Highwaterfa11s@2912#V' });
+          }
+        );
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});

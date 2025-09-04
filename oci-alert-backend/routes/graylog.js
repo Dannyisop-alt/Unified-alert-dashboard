@@ -1,120 +1,192 @@
 const express = require('express');
+const cron = require('node-cron');
 const router = express.Router();
-const GraylogAlert = require('../models/GraylogAlert');
 
-// POST endpoint to receive Graylog alerts (Slack webhook format)
+// 📋 MEMORY LIST - Unlimited capacity, resets daily at 12:05 AM
+let alertsList = [];
+let lastResetTime = new Date().toISOString();
+
+// Color mapping for severity levels
+const colorMap = {
+  '#FF0000': 'critical',
+  '#FFA500': 'high', 
+  '#FFFF00': 'medium',
+  '#008000': 'low',
+  '#0000FF': 'info',
+  '#999999': 'unknown'
+};
+
+// 🕐 DAILY RESET SCHEDULER - Every day at 12:05 AM
+cron.schedule('5 0 * * *', () => {
+  const beforeCount = alertsList.length;
+  alertsList = []; // Clear the list
+  lastResetTime = new Date().toISOString();
+  console.log(`🔄 [DAILY RESET] Cleared ${beforeCount} alerts at 12:05 AM. Fresh start!`);
+  console.log(`📅 [DAILY RESET] Next reset: Tomorrow at 12:05 AM`);
+}, {
+  timezone: "America/New_York" // Adjust timezone as needed
+});
+
+// POST endpoint - Receive Graylog webhooks and store in memory list
 router.post('/', async (req, res) => {
   try {
     const body = req.body;
-    console.log('Received Graylog alert:', JSON.stringify(body, null, 2));
-
-    // Keep your original validation logic for backward compatibility
+    console.log('📨 [WEBHOOK] Received Graylog alert:', JSON.stringify(body, null, 2));
+    
+    // Validation
     if (!body || !body.attachments || !Array.isArray(body.attachments)) {
-      return res.status(400).json({ error: 'Invalid Graylog alert structure' });
+      return res.status(400).json({ error: 'Invalid webhook data format' });
     }
 
-    const attachment = body.attachments[0];
-    
-    // Enhanced message extraction logic
-    let shortMessage = body.text || 'No message provided';
-    let fullMessage = attachment?.text || '';
-    
-    // NEW: Check if title exists in attachment (for new Postman format)
-    if (attachment?.title) {
-      // If there's a title, use it as the short message (this handles your new format)
-      shortMessage = attachment.title;
-      // Keep the attachment text as full message
-      if (attachment.text) {
-        fullMessage = attachment.text;
+    // Process alerts
+    const newAlerts = body.attachments.map(attachment => {
+      let shortMessage = body.text || 'No message provided';
+      let fullMessage = attachment?.text || '';
+      
+      if (attachment?.title) {
+        shortMessage = attachment.title;
+        if (attachment.text) {
+          fullMessage = attachment.text;
+        }
+      } else if (body.text) {
+        shortMessage = body.text;
       }
-    }
-    // FALLBACK: If no title but body.text exists, use original logic
-    else if (body.text) {
-      shortMessage = body.text;
-    }
-    
-    // Convert color to severity (keep your original logic)
-    const getSeverityFromColor = (color) => {
-      const colorMap = {
-        '#FF0000': 'critical',  // Red
-        '#FFA500': 'high',      // Orange
-        '#FFFF00': 'medium',    // Yellow
-        '#008000': 'low',      // Green
-        '#0000FF': 'info',      // Blue
-        '#999999': 'unknown'    // Gray
-      };
-      return colorMap[color?.toUpperCase()] || 'unknown';
-    };
 
-    const alert = new GraylogAlert({
-      channel: body.channel || 'Unknown',
-      shortMessage: shortMessage,
-      fullMessage: fullMessage,
-      severity: getSeverityFromColor(attachment?.color) || 'unknown',
-      color: attachment?.color || '#999999',
-      username: body.username || 'Graylog',
-      iconEmoji: body.icon_emoji || ':warning:',
+      return {
+        _id: `graylog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        channel: body.channel || 'Unknown',
+        shortMessage: shortMessage,
+        fullMessage: fullMessage,
+        severity: colorMap[attachment?.color?.toUpperCase()] || 'unknown',
+        color: attachment?.color || '#999999',
+        username: body.username || 'Graylog',
+        iconEmoji: body.icon_emoji || ':warning:',
+        timestamp: new Date().toISOString(),
+        read: false,
+        acknowledged: false
+      };
     });
 
-    await alert.save();
-    console.log('Graylog alert saved successfully');
-    res.status(201).json({ message: 'Graylog alert saved successfully', alert });
+    // 📋 ADD TO MEMORY LIST (unlimited capacity)
+    alertsList.unshift(...newAlerts); // Add newest alerts to the beginning
+
+    console.log(`✅ [MEMORY] Added ${newAlerts.length} alerts to memory list`);
+    console.log(`📊 [MEMORY] Total alerts in memory: ${alertsList.length}`);
+    
+    res.status(200).json({ 
+      success: true, 
+      processed: newAlerts.length,
+      totalInMemory: alertsList.length,
+      storageMode: 'Memory List',
+      nextReset: 'Tomorrow 12:05 AM'
+    });
+
   } catch (error) {
-    console.error('Error saving Graylog alert:', error);
-    res.status(500).json({ error: 'Failed to save Graylog alert' });
+    console.error('❌ [ERROR] Failed to process Graylog webhook:', error);
+    res.status(500).json({ error: 'Failed to process webhook' });
   }
 });
 
-// GET endpoint to fetch all Graylog alerts
+// GET endpoint - Return alerts from memory list with severity filtering
 router.get('/', async (req, res) => {
   try {
     const { severity, limit = 100 } = req.query;
-    
-    let query = {};
+    let filteredAlerts = [...alertsList]; // Copy the list
+
+    // Apply severity filter
     if (severity && severity !== 'all') {
-      query.severity = severity;
+      filteredAlerts = filteredAlerts.filter(alert => alert.severity === severity);
     }
 
-    const alerts = await GraylogAlert.find(query)
-      .sort({ timestamp: -1 })
-      .limit(parseInt(limit));
-      
-    res.json(alerts);
+    // Apply limit
+    const limitedAlerts = filteredAlerts.slice(0, parseInt(limit));
+
+    console.log(`📤 [GET] Returning ${limitedAlerts.length} alerts (filtered from ${alertsList.length} total)`);
+    console.log(`🔍 [FILTER] Severity filter: ${severity || 'all'}, Limit: ${limit}`);
+    
+    res.json(limitedAlerts);
   } catch (error) {
-    console.error('Error fetching Graylog alerts:', error);
-    res.status(500).json({ error: 'Failed to fetch Graylog alerts' });
+    console.error('❌ [ERROR] Failed to fetch alerts:', error);
+    res.status(500).json({ error: 'Failed to fetch alerts' });
   }
 });
 
-// PUT endpoint to mark alert as read
+// PUT endpoint - Mark alert as read
 router.put('/:id/read', async (req, res) => {
   try {
-    const alert = await GraylogAlert.findByIdAndUpdate(
-      req.params.id,
-      { read: req.body.read },
-      { new: true }
-    );
-    res.json(alert);
+    const { id } = req.params;
+    const { read } = req.body;
+    
+    const alertIndex = alertsList.findIndex(alert => alert._id === id);
+    if (alertIndex === -1) {
+      return res.status(404).json({ error: 'Alert not found' });
+    }
+
+    alertsList[alertIndex].read = read;
+    console.log(`📖 [UPDATE] Alert ${id} marked as ${read ? 'read' : 'unread'}`);
+    
+    res.json(alertsList[alertIndex]);
   } catch (error) {
+    console.error('❌ [ERROR] Failed to update alert:', error);
     res.status(500).json({ error: 'Failed to update alert' });
   }
 });
 
-// ➡️ NEW: PUT endpoint to mark alert as acknowledged
+// PUT endpoint - Acknowledge alert
 router.put('/:id/acknowledge', async (req, res) => {
   try {
     const { id } = req.params;
-    const alert = await GraylogAlert.findByIdAndUpdate(id, { acknowledged: true }, { new: true });
-    if (!alert) {
-      return res.status(404).json({ message: 'Alert not found.' });
+    
+    const alertIndex = alertsList.findIndex(alert => alert._id === id);
+    if (alertIndex === -1) {
+      return res.status(404).json({ error: 'Alert not found' });
     }
-    res.status(200).json(alert);
+
+    alertsList[alertIndex].acknowledged = true;
+    console.log(`✅ [ACKNOWLEDGE] Alert ${id} acknowledged`);
+    
+    res.json(alertsList[alertIndex]);
   } catch (error) {
-    console.error('Error marking alert as acknowledged:', error);
-    res.status(500).json({
-      message: 'Failed to mark alert as acknowledged.',
-      error: error.message,
+    console.error('❌ [ERROR] Failed to acknowledge alert:', error);
+    res.status(500).json({ error: 'Failed to acknowledge alert' });
+  }
+});
+
+// Status endpoint - Show memory list stats
+router.get('/status', async (req, res) => {
+  try {
+    res.json({
+      status: 'Memory List Active',
+      totalAlertsInMemory: alertsList.length,
+      storageMode: 'Unlimited Memory List',
+      lastReset: lastResetTime,
+      nextReset: 'Daily at 12:05 AM',
+      resetSchedule: 'Every day at 12:05 AM',
+      timestamp: new Date().toISOString()
     });
+  } catch (error) {
+    console.error('❌ [ERROR] Failed to get status:', error);
+    res.status(500).json({ error: 'Failed to get status' });
+  }
+});
+
+// Manual reset endpoint (for testing)
+router.post('/reset', async (req, res) => {
+  try {
+    const beforeCount = alertsList.length;
+    alertsList = [];
+    lastResetTime = new Date().toISOString();
+    
+    console.log(`🔄 [MANUAL RESET] Cleared ${beforeCount} alerts manually`);
+    
+    res.json({
+      message: 'Memory list manually reset',
+      clearedAlerts: beforeCount,
+      resetTime: lastResetTime
+    });
+  } catch (error) {
+    console.error('❌ [ERROR] Failed to reset alerts:', error);
+    res.status(500).json({ error: 'Failed to reset alerts' });
   }
 });
 

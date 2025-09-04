@@ -12,7 +12,7 @@ services:
     environment:
       - MONGO_URI=mongodb+srv://vamalhotra751:123@cluster0.pwebx01.mongodb.net/alertDB?retryWrites=true&w=majority&appName=Cluster0
       - ADMIN_USERNAME=himalhotra751@gmail.com
-      - ADMIN_PASSWORD=Highwaterfa11s@2912#V
+      - ADMIN_PASSWORD=thisner 
       - SQLITE_DB_PATH=./users.sqlite
       - JWT_SECRET=aB7@xYz!pQ3#tUvW2&nM5*oJ8^rT1
       - PORT=5000

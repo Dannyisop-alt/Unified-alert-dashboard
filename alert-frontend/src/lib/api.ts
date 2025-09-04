@@ -3,21 +3,45 @@ import { getToken } from '@/lib/auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-export const api = {
-  // Fetch Graylog alerts
-  async getGraylogAlerts(params?: { severity?: string; limit?: number }): Promise<GraylogAlert[]> {
-    const url = new URL(`${API_BASE_URL}/graylog-alerts`);
-    if (params?.severity) url.searchParams.set('severity', params.severity);
-    if (params?.limit) url.searchParams.set('limit', params.limit.toString());
-    
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json'
+// Helper function to retry failed requests
+const retryRequest = async <T>(
+  requestFn: () => Promise<T>, 
+  maxRetries: number = 3, 
+  delay: number = 1000
+): Promise<T> => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
       }
-    });
-    if (!response.ok) throw new Error('Failed to fetch Graylog alerts');
-    return response.json();
+      console.warn(`Request failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2; // Exponential backoff
+    }
+  }
+  throw new Error('Max retries exceeded');
+};
+
+export const api = {
+  // Fetch Graylog alerts from memory list
+  async getGraylogAlerts(params?: { severity?: string; limit?: number }): Promise<GraylogAlert[]> {
+    return retryRequest(async () => {
+      const url = new URL(`${API_BASE_URL}/graylog-alerts`);
+      if (params?.severity) url.searchParams.set('severity', params.severity);
+      if (params?.limit) url.searchParams.set('limit', params.limit.toString());
+      
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        // Add timeout to prevent hanging requests
+        signal: AbortSignal.timeout(30000) // 30 second timeout
+      });
+      if (!response.ok) throw new Error(`Failed to fetch Graylog alerts: ${response.statusText}`);
+      return response.json();
+    }, 2, 2000); // 2 retries with 2 second initial delay
   },
 
   // Fetch Infrastructure/OCI alerts
@@ -29,22 +53,26 @@ export const api = {
     alertType?: string; 
     limit?: number;
   }): Promise<OCIAlert[]> {
-    const url = new URL(`${API_BASE_URL}/oci-alerts`);
-    if (params?.severity) url.searchParams.set('severity', params.severity);
-    if (params?.vm) url.searchParams.set('vm', params.vm);
-    if (params?.tenant) url.searchParams.set('tenant', params.tenant);
-    if (params?.region) url.searchParams.set('region', params.region);
-    if (params?.alertType) url.searchParams.set('alertType', params.alertType);
-    if (params?.limit) url.searchParams.set('limit', params.limit.toString());
-    
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    if (!response.ok) throw new Error('Failed to fetch OCI alerts');
-    return response.json();
+    return retryRequest(async () => {
+      const url = new URL(`${API_BASE_URL}/oci-alerts`);
+      if (params?.severity) url.searchParams.set('severity', params.severity);
+      if (params?.vm) url.searchParams.set('vm', params.vm);
+      if (params?.tenant) url.searchParams.set('tenant', params.tenant);
+      if (params?.region) url.searchParams.set('region', params.region);
+      if (params?.alertType) url.searchParams.set('alertType', params.alertType);
+      if (params?.limit) url.searchParams.set('limit', params.limit.toString());
+      
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+          'Content-Type': 'application/json'
+        },
+        // Add timeout to prevent hanging requests
+        signal: AbortSignal.timeout(60000) // 60 second timeout for OCI
+      });
+      if (!response.ok) throw new Error(`Failed to fetch OCI alerts: ${response.statusText}`);
+      return response.json();
+    }, 2, 3000); // 2 retries with 3 second initial delay
   },
 
   // Mark alert as read

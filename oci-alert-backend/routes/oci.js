@@ -8,8 +8,16 @@ router.get('/', async (req, res) => {
   try {
     console.log('🔄 Fetching active alerts directly from OCI...');
     
-    // Fetch fresh alerts directly from OCI
-    const ociAlerts = await getOCIAlerts();
+    // Add timeout to prevent hanging requests
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('OCI request timeout')), 60000); // 60 second timeout
+    });
+    
+    // Fetch fresh alerts directly from OCI with timeout
+    const ociAlerts = await Promise.race([
+      getOCIAlerts(),
+      timeoutPromise
+    ]);
     console.log(`📊 Fetched ${ociAlerts.length} active alerts from OCI`);
     
     // Apply filters from query parameters
@@ -63,8 +71,11 @@ router.get('/', async (req, res) => {
     res.json(filteredAlerts);
     
   } catch (error) {
-    console.error('❌ Error fetching OCI alerts:', error);
-    res.status(500).json({ error: 'Failed to fetch OCI alerts' });
+    console.error('❌ Error fetching OCI alerts:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    
+    // Don't crash the server, return empty array instead
+    res.status(200).json([]);
   }
 });
 
