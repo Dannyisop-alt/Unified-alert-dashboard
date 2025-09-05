@@ -40,7 +40,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
 
   const fetchHeartbeatData = useCallback(() => {
     if (isConnecting) {
-      if (config.debug) console.log('📡 Connection already in progress, skipping...');
+      // Connection already in progress
       return;
     }
 
@@ -55,7 +55,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
       const timeoutId = setTimeout(() => {
         if (!dataReceived) {
           connectionError = true;
-          if (config.debug) console.log('⏱️ Connection timeout - server response slow');
+          // Connection timeout
           ws.close();
           setLoading(false);
           setIsConnecting(false);
@@ -64,7 +64,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
       }, config.timeout);
 
       ws.onopen = () => {
-        if (config.debug) console.log('✅ WebSocket connected - requesting heartbeat data');
+        // WebSocket connected
         ws.send('GetConStatus~Y');
       };
 
@@ -81,7 +81,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
             setLoading(false);
             setError(null);
             
-            if (config.debug) console.log(`📊 Heartbeat data received: ${jsonData.length} systems`);
+            // Heartbeat data received
           } else {
             if (config.debug) console.warn('⚠️ Empty response from server');
             setError('No data received from heartbeat service');
@@ -96,7 +96,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
         ws.close();
         setIsConnecting(false);
         
-        if (config.debug) console.log('✅ Data processed, connection closed');
+        // Data processed
       };
 
       ws.onerror = (error) => {
@@ -114,7 +114,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
         setIsConnecting(false);
         
         if (!dataReceived && !intentionallyClosed && !connectionError) {
-          console.log(`⚠️ Connection closed unexpectedly (code: ${event.code})`);
+          // Connection closed unexpectedly
           if (loading) {
             setLoading(false);
             // Don't set error state for connection issues
@@ -134,7 +134,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
     fetchHeartbeatData();
     
     const refreshInterval = setInterval(() => {
-      if (config.debug) console.log('🔄 Scheduled refresh - fetching heartbeat data...');
+      // Scheduled refresh
       fetchHeartbeatData();
     }, config.refreshInterval);
 
@@ -162,7 +162,7 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.5);
     } catch (e) {
-      if (config.debug) console.log('Audio creation failed:', e);
+      // Audio creation failed
     }
   };
 

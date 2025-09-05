@@ -6,7 +6,7 @@ const { getOCIAlerts } = require('../services/ociService');
 // Direct OCI fetch endpoint - no database storage
 router.get('/', async (req, res) => {
   try {
-    console.log('🔄 Fetching active alerts directly from OCI...');
+    // Fetching active alerts from OCI
     
     // Add timeout to prevent hanging requests
     const timeoutPromise = new Promise((_, reject) => {
@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
       getOCIAlerts(),
       timeoutPromise
     ]);
-    console.log(`📊 Fetched ${ociAlerts.length} active alerts from OCI`);
+    // Fetched alerts from OCI
     
     // Apply filters from query parameters
     const { 
@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
       filteredAlerts = filteredAlerts.slice(0, parseInt(limit));
     }
     
-    console.log(`✅ Returning ${filteredAlerts.length} filtered alerts (limit: ${limit || 'none'})`);
+    // Returning filtered alerts
     res.json(filteredAlerts);
     
   } catch (error) {
@@ -82,10 +82,10 @@ router.get('/', async (req, res) => {
 // Keep the pull endpoint for manual refresh (but don't save to DB)
 router.post('/pull', async (req, res) => {
   try {
-    console.log('🔄 Manual pull triggered - fetching fresh alerts from OCI...');
+    // Manual pull triggered
     const ociAlerts = await getOCIAlerts();
     
-    console.log(`✅ Pull completed: ${ociAlerts.length} active alerts fetched from OCI`);
+    // Pull completed
     res.status(200).json({ 
       message: `Successfully pulled ${ociAlerts.length} active alerts from OCI`,
       alerts: ociAlerts,
@@ -101,7 +101,7 @@ router.post('/pull', async (req, res) => {
 // Get unique values for filters directly from OCI data
 router.get('/filters', async (req, res) => {
   try {
-    console.log('🔄 Fetching filter options from OCI...');
+    // Fetching filter options
     const ociAlerts = await getOCIAlerts();
     
     // Extract unique values from the fresh OCI data
@@ -111,7 +111,7 @@ router.get('/filters', async (req, res) => {
     const alertTypes = [...new Set(ociAlerts.map(alert => alert.alertType).filter(Boolean))];
     const severities = [...new Set(ociAlerts.map(alert => alert.severity).filter(Boolean))];
 
-    console.log(`✅ Filter options: ${vms.length} VMs, ${tenants.length} tenants, ${regions.length} regions`);
+    // Filter options fetched
     res.json({
       vms,
       tenants,

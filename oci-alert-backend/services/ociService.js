@@ -4,41 +4,31 @@ const oci = require('oci-sdk');
 const configurationFilePath = "~/.oci/config";
 const configProfile = "DEFAULT";
 
-console.log(`🔧 [CONFIG] Loading OCI configuration from: ${configurationFilePath}`);
-console.log(`🔧 [CONFIG] Using profile: ${configProfile}`);
+// OCI Configuration loaded
 
 // Initialize OCI SDK clients for all necessary services
 let provider, monitoringClient, identityClient, computeClient;
 
 try {
-    console.log(`🔧 [INIT] Initializing OCI authentication provider...`);
     provider = new oci.common.ConfigFileAuthenticationDetailsProvider(
         configurationFilePath,
         configProfile
     );
-    console.log(`✅ [INIT] Authentication provider initialized successfully`);
     
-    console.log(`🔧 [INIT] Initializing monitoring client...`);
     monitoringClient = new oci.monitoring.MonitoringClient({
         authenticationDetailsProvider: provider
     });
-    console.log(`✅ [INIT] Monitoring client initialized successfully`);
     
-    console.log(`🔧 [INIT] Initializing identity client...`);
     identityClient = new oci.identity.IdentityClient({
         authenticationDetailsProvider: provider
     });
-    console.log(`✅ [INIT] Identity client initialized successfully`);
     
-    console.log(`🔧 [INIT] Initializing compute client...`);
     computeClient = new oci.core.ComputeClient({
         authenticationDetailsProvider: provider
     });
-    console.log(`✅ [INIT] Compute client initialized successfully`);
     
 } catch (initError) {
-    console.error(`❌ [INIT] Failed to initialize OCI clients:`, initError.message);
-    console.error(`❌ [INIT] Stack trace:`, initError.stack);
+    console.error(`❌ Failed to initialize OCI clients:`, initError.message);
 }
 
 // Caches for performance
@@ -46,12 +36,11 @@ const compartmentNameCache = new Map();
 const instanceCache = new Map();
 const instanceNameMap = new Map();
 
-console.log(`🔧 [CACHE] Initialized performance caches`);
+// Performance caches initialized
 
 // Function to clear compartment cache for testing
 const clearCompartmentCache = () => {
     compartmentNameCache.clear();
-    console.log(`🧹 [CACHE] Compartment cache cleared`);
 };
 
 // Clear cache on startup to ensure fresh detection
@@ -63,50 +52,49 @@ clearCompartmentCache();
  * Handles special cases like PaaS compartments and nested compartments.
  */
 const getCompartmentName = async (compartmentId) => {
-    console.log(`🏢 [COMPARTMENT] Getting compartment name for ID: ${compartmentId}`);
+    // Getting compartment name
     
     if (compartmentNameCache.has(compartmentId)) {
         const cachedName = compartmentNameCache.get(compartmentId);
-        console.log(`💾 [COMPARTMENT] Found in cache: ${cachedName}`);
+        // Found in cache
         return cachedName;
     }
     
     try {
-        console.log(`📡 [COMPARTMENT] Making API call to get compartment details...`);
+        // Making API call
         const compartment = await identityClient.getCompartment({
             compartmentId
         });
-        console.log(`📡 [COMPARTMENT] API response received for compartment: ${compartment.compartment.name}`);
+        // API response received
         
         let name = compartment.compartment.name;
-        console.log(`🔍 [COMPARTMENT] Initial compartment name: ${name}`);
+        // Processing compartment name
 
         // Handle nested compartments or special cases
         if (name === 'ManagedCompartmentForPaaS' || name.includes('ocid1.')) {
-            console.log(`⚠️ [COMPARTMENT] Special case detected (${name}), checking parent compartment...`);
+            // Special case detected
             if (compartment.compartment.parentCompartmentId) {
                 try {
-                    console.log(`📡 [COMPARTMENT] Fetching parent compartment: ${compartment.compartment.parentCompartmentId}`);
+                    // Fetching parent compartment
                     const parent = await identityClient.getCompartment({
                         compartmentId: compartment.compartment.parentCompartmentId
                     });
                     name = parent.compartment.name;
-                    console.log(`✅ [COMPARTMENT] Using parent compartment name: ${name}`);
+                    // Using parent compartment name
                 } catch (parentError) {
-                    console.log(`❌ [COMPARTMENT] Could not fetch parent compartment: ${parentError.message}`);
+                    console.error(`❌ Could not fetch parent compartment: ${parentError.message}`);
                 }
             } else {
-                console.log(`⚠️ [COMPARTMENT] No parent compartment ID available`);
+                // No parent compartment ID available
             }
         }
         
-        console.log(`💾 [COMPARTMENT] Caching compartment name: ${name}`);
+        // Caching compartment name
         compartmentNameCache.set(compartmentId, name);
-        console.log(`✅ [COMPARTMENT] Final compartment name: ${name}`);
+        // Final compartment name
         return name;
     } catch (error) {
-        console.error(`❌ [COMPARTMENT] Error fetching compartment name for ${compartmentId}:`, error.message);
-        console.error(`❌ [COMPARTMENT] Error stack:`, error.stack);
+        console.error(`❌ Error fetching compartment name for ${compartmentId}:`, error.message);
         return 'Unknown Tenant';
     }
 };
@@ -190,64 +178,35 @@ const extractVmInfo = async (alarm, instanceMap) => {
  * @returns {Array} An array of alerts formatted for your OciAlert model.
  */
 async function getOCIAlerts() {
-    console.log(`\n🚀 [MAIN] =====================================`);
-    console.log(`🚀 [MAIN] Starting OCI Alerts Pull Process...`);
-    console.log(`🚀 [MAIN] Timestamp: ${new Date().toISOString()}`);
-    console.log(`🚀 [MAIN] =====================================\n`);
-    
     try {
-        console.log("📡 [MAIN] Pulling alerts from OCI...");
-        
-        console.log("🔧 [TENANCY] Getting tenancy ID...");
         const tenancyId = await provider.getTenantId();
-        console.log(`✅ [TENANCY] Tenancy ID obtained: ${tenancyId}`);
         
         // 1. Fetch all instances to create a fast lookup map for VM names.
-        console.log("\n📊 [INSTANCES] =====================================");
-        console.log("📊 [INSTANCES] Fetching instances from compute service...");
-        
         const instancesRequest = { 
             compartmentId: tenancyId, 
             compartmentIdInSubtree: true 
         };
-        console.log(`📊 [INSTANCES] Request parameters:`, JSON.stringify(instancesRequest, null, 2));
         
-        console.log(`📡 [INSTANCES] Making API call to list instances...`);
         const instancesResponse = await computeClient.listInstances(instancesRequest);
-        console.log(`✅ [INSTANCES] API call completed successfully`);
         
         const instanceMap = new Map();
-        console.log(`📊 [INSTANCES] Processing ${instancesResponse.items.length} instances...`);
-        
         for (let i = 0; i < instancesResponse.items.length; i++) {
             const instance = instancesResponse.items[i];
             instanceMap.set(instance.id, instance.displayName);
-            console.log(`📊 [INSTANCES] [${i + 1}/${instancesResponse.items.length}] ${instance.displayName} -> ${instance.id}`);
         }
-        console.log(`✅ [INSTANCES] Instance map created with ${instanceMap.size} entries`);
-        console.log("📊 [INSTANCES] =====================================\n");
 
         // 2. Fetch all currently firing alarms from the entire tenancy.
-        console.log("🚨 [ALARMS] =====================================");
-        console.log("🚨 [ALARMS] Fetching alarms from monitoring service...");
-        
         const alarmsRequest = {
             compartmentId: tenancyId,
             compartmentIdInSubtree: true,
             lifecycleState: oci.monitoring.models.Alarm.LifecycleState.Active
         };
-        console.log(`🚨 [ALARMS] Request parameters:`, JSON.stringify(alarmsRequest, null, 2));
-        
-        console.log(`📡 [ALARMS] Making API call to list alarms...`);
         const alarmsResponse = await monitoringClient.listAlarms(alarmsRequest);
-        console.log(`✅ [ALARMS] API call completed successfully`);
-        console.log(`🚨 [ALARMS] Found ${alarmsResponse.items.length} alarms to process`);
-        console.log("🚨 [ALARMS] =====================================\n");
+        // Alarms fetched successfully
         
         const alerts = [];
         
         // 3. ✅ OPTIMIZED: Batch process alarms with parallel execution
-        console.log("🔄 [PROCESSING] Starting optimized alarm processing...");
         
         // ✅ Create compartment cache to avoid repeated API calls
         const compartmentCache = new Map();
@@ -260,11 +219,11 @@ async function getOCIAlerts() {
             batches.push(alarmsResponse.items.slice(i, i + batchSize));
         }
         
-        console.log(`📊 [BATCH] Processing ${alarmsResponse.items.length} alarms in ${batches.length} batches of ${batchSize}`);
+        // Processing alarms in batches
         
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
             const batch = batches[batchIndex];
-            console.log(`🔄 [BATCH ${batchIndex + 1}/${batches.length}] Processing ${batch.length} alarms...`);
+            // Processing batch
             
             // ✅ Process batch in parallel
             const batchPromises = batch.map(async (alarm, index) => {
@@ -322,16 +281,10 @@ async function getOCIAlerts() {
                 }
             });
             
-            console.log(`✅ [BATCH ${batchIndex + 1}/${batches.length}] Completed - ${batchResults.filter(r => r).length} alerts processed`);
+            // Batch completed
         }
 
-        console.log("\n🔄 [PROCESSING] =====================================");
-        console.log(`🎉 [COMPLETE] OCI Alert Pull Complete!`);
-        console.log(`📊 [STATS] Total alarms processed: ${alarmsResponse.items.length}`);
-        console.log(`📊 [STATS] Total alerts generated: ${alerts.length}`);
-        console.log(`📊 [STATS] Success rate: ${((alerts.length / alarmsResponse.items.length) * 100).toFixed(1)}%`);
-        console.log(`⏰ [COMPLETE] Process completed at: ${new Date().toISOString()}`);
-        console.log(`🎉 [COMPLETE] =====================================\n`);
+        // OCI Alert Pull Complete
         
         return alerts;
 
@@ -344,7 +297,7 @@ async function getOCIAlerts() {
         
         // Don't create fake error alerts - return empty array instead
         // This ensures only real Oracle data gets through to the frontend
-        console.log(`🚨 [CRITICAL] No alerts returned due to service error - frontend will show empty state`);
+        // No alerts returned due to service error
         return [];
     }
 }

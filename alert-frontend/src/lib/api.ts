@@ -16,7 +16,7 @@ const retryRequest = async <T>(
       if (attempt === maxRetries) {
         throw error;
       }
-      console.warn(`Request failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+      // Silently retry failed requests
       await new Promise(resolve => setTimeout(resolve, delay));
       delay *= 2; // Exponential backoff
     }

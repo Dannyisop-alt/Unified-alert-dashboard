@@ -13,14 +13,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   useEffect(() => {
     // Check if the user is authenticated. If not, redirect to the login page.
     if (!isAuthenticated()) {
-      console.log('User not authenticated. Redirecting to login.');
+      // User not authenticated
       navigate('/login');
       return;
     }
 
     // If the route requires an admin and the user is not an admin, redirect them.
     if (requireAdmin && !isAdmin()) {
-      console.log('User is not an admin. Redirecting to login (or access denied page).');
+      // User is not an admin
       navigate('/login');
     }
   }, [navigate, requireAdmin]);

@@ -21,8 +21,7 @@ cron.schedule('5 0 * * *', () => {
   const beforeCount = alertsList.length;
   alertsList = []; // Clear the list
   lastResetTime = new Date().toISOString();
-  console.log(`🔄 [DAILY RESET] Cleared ${beforeCount} alerts at 12:05 AM. Fresh start!`);
-  console.log(`📅 [DAILY RESET] Next reset: Tomorrow at 12:05 AM`);
+  // Daily reset completed
 }, {
   timezone: "America/New_York" // Adjust timezone as needed
 });
@@ -31,7 +30,7 @@ cron.schedule('5 0 * * *', () => {
 router.post('/', async (req, res) => {
   try {
     const body = req.body;
-    console.log('📨 [WEBHOOK] Received Graylog alert:', JSON.stringify(body, null, 2));
+    // Received Graylog alert
     
     // Validation
     if (!body || !body.attachments || !Array.isArray(body.attachments)) {
@@ -70,8 +69,7 @@ router.post('/', async (req, res) => {
     // 📋 ADD TO MEMORY LIST (unlimited capacity)
     alertsList.unshift(...newAlerts); // Add newest alerts to the beginning
 
-    console.log(`✅ [MEMORY] Added ${newAlerts.length} alerts to memory list`);
-    console.log(`📊 [MEMORY] Total alerts in memory: ${alertsList.length}`);
+    // Added alerts to memory list
     
     res.status(200).json({ 
       success: true, 
@@ -101,8 +99,7 @@ router.get('/', async (req, res) => {
     // Apply limit
     const limitedAlerts = filteredAlerts.slice(0, parseInt(limit));
 
-    console.log(`📤 [GET] Returning ${limitedAlerts.length} alerts (filtered from ${alertsList.length} total)`);
-    console.log(`🔍 [FILTER] Severity filter: ${severity || 'all'}, Limit: ${limit}`);
+    // Returning filtered alerts
     
     res.json(limitedAlerts);
   } catch (error) {
@@ -123,7 +120,7 @@ router.put('/:id/read', async (req, res) => {
     }
 
     alertsList[alertIndex].read = read;
-    console.log(`📖 [UPDATE] Alert ${id} marked as ${read ? 'read' : 'unread'}`);
+    // Alert status updated
     
     res.json(alertsList[alertIndex]);
   } catch (error) {
@@ -143,7 +140,7 @@ router.put('/:id/acknowledge', async (req, res) => {
     }
 
     alertsList[alertIndex].acknowledged = true;
-    console.log(`✅ [ACKNOWLEDGE] Alert ${id} acknowledged`);
+    // Alert acknowledged
     
     res.json(alertsList[alertIndex]);
   } catch (error) {
@@ -177,7 +174,7 @@ router.post('/reset', async (req, res) => {
     alertsList = [];
     lastResetTime = new Date().toISOString();
     
-    console.log(`🔄 [MANUAL RESET] Cleared ${beforeCount} alerts manually`);
+    // Manual reset completed
     
     res.json({
       message: 'Memory list manually reset',

@@ -24,8 +24,8 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
 
   // ✅ CRITICAL: Immediately clear ALL state when source changes
   useEffect(() => {
-    console.log(`🧹 [CLEAN] Category/Source changed - CLEARING ALL STATE`);
-    console.log(`🧹 [CLEAN] New category: ${selectedCategory}, New sources:`, filters.source);
+    console.log(`🔄 [DASHBOARD] Category changed to: ${selectedCategory}`);
+    // Category/Source changed - clearing state
     
     // ✅ FORCE IMMEDIATE STATE RESET
     setGraylogAlerts([]);
@@ -34,7 +34,7 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
     setError(null);
     setLastHeartbeatUpdate(null);
     
-    console.log(`🧹 [CLEAN] State cleared - triggering fresh fetch`);
+    // State cleared - triggering fresh fetch
   }, [selectedCategory, filters.source?.join(',')]); // React to source array changes
 
 
@@ -45,21 +45,21 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
         setLoading(true);
         setError(null);
         
-        console.log(`🔄 [FETCH] Fetching data for sources:`, filters.source);
+        // Fetching data for sources
         
         // ✅ ONLY fetch what we need based on current source filter
         const needsGraylog = filters.source?.includes('Application Logs');
         const needsOCI = filters.source?.includes('Infrastructure Alerts');  
         const needsHeartbeat = filters.source?.includes('Application Heartbeat');
         
-        console.log(`🔄 [FETCH] Needs - Graylog: ${needsGraylog}, OCI: ${needsOCI}, Heartbeat: ${needsHeartbeat}`);
+        // Determining which services to fetch
         
         // ✅ Fetch only required data
         if (needsGraylog) {
-          console.log('📋 [FETCH] Fetching Graylog alerts...');
+          console.log('📋 [DASHBOARD] Fetching Graylog alerts...');
           try {
             const graylogData = await api.getGraylogAlerts({ limit: 100 });
-            console.log(`📋 [FETCH] Graylog loaded: ${graylogData.length} alerts`);
+            console.log(`📋 [DASHBOARD] Graylog loaded: ${graylogData.length} alerts`);
             setGraylogAlerts(graylogData);
           } catch (err) {
             console.error('📋 [FETCH] Graylog failed:', err);
@@ -67,10 +67,10 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
         }
         
         if (needsOCI) {
-          console.log('🏗️ [FETCH] Fetching Infrastructure alerts...');
+          console.log('🏗️ [DASHBOARD] Fetching Infrastructure alerts...');
           try {
             const ociData = await api.getOCIAlerts({ limit: 100 });
-            console.log(`🏗️ [FETCH] Infrastructure loaded: ${ociData.length} alerts`);
+            console.log(`🏗️ [DASHBOARD] Infrastructure loaded: ${ociData.length} alerts`);
             setOCIAlerts(ociData);
           } catch (err) {
             console.error('🏗️ [FETCH] Infrastructure failed:', err);
@@ -78,10 +78,10 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
         }
         
         if (needsHeartbeat) {
-          console.log('💓 [FETCH] Fetching Heartbeat alerts...');
+          console.log('💓 [DASHBOARD] Fetching Heartbeat alerts...');
           try {
             const heartbeatData = await heartbeatService.fetchHeartbeatData();
-            console.log(`💓 [FETCH] Heartbeat loaded: ${heartbeatData.length} alerts`);
+            console.log(`💓 [DASHBOARD] Heartbeat loaded: ${heartbeatData.length} alerts`);
             setHeartbeatAlerts(heartbeatData);
             setLastHeartbeatUpdate(new Date());
           } catch (err) {
@@ -94,7 +94,8 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
         console.error('🚨 [FETCH] Global error:', err);
       } finally {
         setLoading(false);
-        console.log(`✅ [FETCH] Fetch cycle complete for category: ${selectedCategory}`);
+        console.log(`✅ [DASHBOARD] ${selectedCategory} tab loaded successfully`);
+        // Fetch cycle complete
       }
     };
 
@@ -102,7 +103,7 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
     if (filters.source && filters.source.length > 0) {
       fetchCategoryData();
     } else {
-      console.log('⚠️ [FETCH] No source filter - skipping fetch');
+      // No source filter - skipping fetch
       setLoading(false);
     }
   }, [selectedCategory, filters.source?.join(',')]); // Separate fetch effect
@@ -116,7 +117,7 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
   useEffect(() => {
     if (onRefresh) {
       (window as any).refreshAlerts = () => {
-        console.log('🔄 [REFRESH] Manual refresh triggered');
+        // Manual refresh triggered
         // Clear state first, then refetch
         setGraylogAlerts([]);
         setOCIAlerts([]);

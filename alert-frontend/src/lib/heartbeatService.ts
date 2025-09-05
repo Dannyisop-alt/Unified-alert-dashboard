@@ -109,14 +109,14 @@ class HeartbeatService {
         const timeoutId = setTimeout(() => {
           if (!dataReceived) {
             connectionError = true;
-            if (this.config.debug) console.log('⏱️ Heartbeat connection timeout');
+            // Connection timeout
             ws.close();
             reject(new Error('Heartbeat connection timeout')); // Reject instead of empty array
           }
         }, this.config.timeout);
 
         ws.onopen = () => {
-          if (this.config.debug) console.log('✅ Heartbeat WebSocket connected');
+          // WebSocket connected
           ws.send('GetConStatus~Y');
         };
 
@@ -128,13 +128,13 @@ class HeartbeatService {
             const jsonData: HeartbeatSystem[] = JSON.parse(event.data);
             if (jsonData && jsonData.length > 0) {
               const alerts = this.convertToAlerts(jsonData);
-              if (this.config.debug) console.log(`📊 Converted ${jsonData.length} systems to ${alerts.length} heartbeat alerts`);
+              // Converted systems to alerts
               resolve(alerts);
             } else {
               resolve([]);
             }
           } catch (parseError) {
-            console.error('❌ Error parsing heartbeat data:', parseError);
+            // Silently handle parse errors
             reject(new Error('Failed to parse heartbeat data'));
           }
           
@@ -144,7 +144,7 @@ class HeartbeatService {
         ws.onerror = (error) => {
           clearTimeout(timeoutId);
           if (!dataReceived && !connectionError) {
-            console.error('❌ Heartbeat WebSocket error:', error);
+            // Silently handle WebSocket errors
             // Return empty array instead of rejecting to prevent breaking the UI
             resolve([]);
           }
@@ -159,7 +159,7 @@ class HeartbeatService {
         };
 
       } catch (error) {
-        console.error('❌ Failed to create heartbeat WebSocket:', error);
+        // Silently handle WebSocket creation errors
         // Return empty array instead of rejecting to prevent breaking the UI
         resolve([]);
       }

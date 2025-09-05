@@ -4,11 +4,11 @@ import { DashboardHeader } from '@/components/DashboardHeader';
 import { CategoryToggle } from '@/components/CategoryToggle';
 import { heartbeatService } from '@/lib/heartbeatService';
 import { api } from '@/lib/api';
-import { getAccess } from '@/lib/auth';
+import { getAccess, type UserAccess } from '@/lib/auth';
 import type { AlertCategory, UserPreferences, AlertFilters } from '@/types/alerts';
 
 // Helper function to get default category based on user access
-const getDefaultCategoryFromAccess = (access: string[]): AlertCategory => {
+const getDefaultCategoryFromAccess = (access: UserAccess[]): AlertCategory => {
   // Priority order: logs -> infrastructure -> heartbeat
   if (access.includes('Application Logs')) return 'logs';
   if (access.includes('Infrastructure Alerts')) return 'infrastructure';
@@ -89,11 +89,13 @@ const Index = () => {
 
     const fetchHeartbeatCount = async () => {
       try {
+        console.log('💓 [TAB] Loading Heartbeat data...');
         const heartbeatAlerts = await heartbeatService.fetchHeartbeatData();
         const criticalCount = heartbeatAlerts.filter(alert => alert.severity === 'critical').length;
         setHeartbeatCriticalCount(criticalCount);
+        console.log(`💓 [TAB] Heartbeat loaded: ${heartbeatAlerts.length} alerts, ${criticalCount} critical`);
       } catch (error) {
-        console.error('Failed to fetch heartbeat data:', error);
+        // Silently handle heartbeat fetch errors to avoid console noise
         // Don't set count to 0 on error, keep previous value
       }
     };
@@ -119,11 +121,13 @@ const Index = () => {
 
     const fetchLogsCount = async () => {
       try {
+        console.log('📋 [TAB] Loading Logs data...');
         const graylogAlerts = await api.getGraylogAlerts({ limit: 100 });
         const criticalCount = graylogAlerts.filter(alert => alert.severity === 'critical').length;
         setLogsCriticalCount(criticalCount);
+        console.log(`📋 [TAB] Logs loaded: ${graylogAlerts.length} alerts, ${criticalCount} critical`);
       } catch (error) {
-        console.error('Failed to fetch logs data:', error);
+        // Silently handle logs fetch errors to avoid console noise
         // Don't set count to 0 on error, keep previous value
       }
     };
@@ -149,13 +153,15 @@ const Index = () => {
 
     const fetchInfrastructureCount = async () => {
       try {
+        console.log('🏗️ [TAB] Loading Infrastructure data...');
         const infrastructureAlerts = await api.getOCIAlerts({ limit: 100 });
         const criticalCount = infrastructureAlerts.filter(alert => 
           alert.severity === 'critical' || alert.severity === 'error'
         ).length;
         setInfrastructureCriticalCount(criticalCount);
+        console.log(`🏗️ [TAB] Infrastructure loaded: ${infrastructureAlerts.length} alerts, ${criticalCount} critical`);
       } catch (error) {
-        console.error('Failed to fetch infrastructure data:', error);
+        // Silently handle infrastructure fetch errors to avoid console noise
         // Don't set count to 0 on error, keep previous value
       }
     };
@@ -174,7 +180,8 @@ const Index = () => {
 
   // Save preferences and update source filter when category changes
   const handleCategoryChange = (category: AlertCategory) => {
-    console.log(`🔄 [DEBUG] Switching to category: ${category}`);
+    console.log(`🔄 [TAB] Switching to ${category} tab`);
+    // Switching category
     
     const sourceMap: Record<AlertCategory, string> = {
       'heartbeat': 'Application Heartbeat',
@@ -183,11 +190,11 @@ const Index = () => {
       'database': 'Infrastructure Alerts'
     };
     
-    const requiredAccess = sourceMap[category!];
+    const requiredAccess = sourceMap[category!] as UserAccess;
     
     // SECURITY: Only allow category change if user has access
     if (!userAccess.includes(requiredAccess)) {
-      console.warn(`🚫 [SECURITY] User attempted to access ${category} without permission`);
+      // Silently prevent unauthorized access
       return;
     }
     
@@ -216,7 +223,7 @@ const Index = () => {
     setUserPreferences(newPreferences);
     localStorage.setItem('userPreferences', JSON.stringify(newPreferences));
     
-    console.log(`✅ [DEBUG] Category change complete: ${category} with source: ${newSource}, resourceType: ${category === 'database' ? 'Database' : 'undefined'}`);
+    // Category change complete
   };
 
   // Calculate critical alert counts only

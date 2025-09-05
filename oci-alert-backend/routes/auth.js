@@ -35,11 +35,13 @@ router.post('/login', async (req, res) => {
     }
 
     const selectSql = `SELECT USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE FROM ALERTS_USERPROFILE WHERE USER_ID = ?`;
+    
     db.get(selectSql, [email], async (err, row) => {
       if (err) {
-        console.error('SQLite select error:', err);
+        console.error('❌ SQLite select error:', err);
         return res.status(500).json({ error: 'Failed to login' });
       }
+      
       if (!row) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }

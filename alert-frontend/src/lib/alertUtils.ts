@@ -8,13 +8,11 @@ export const processAlerts = (
   filters: AlertFilters
 ): ProcessedAlert[] => {
   
-  console.log('🔍 [PROCESS] Starting alert processing...');
-  console.log('🔍 [PROCESS] Input counts - Graylog:', graylogAlerts.length, 'OCI:', ociAlerts.length, 'Heartbeat:', heartbeatAlerts.length);
-  console.log('🔍 [PROCESS] Active source filters:', filters.source);
+  // Starting alert processing
 
   // ✅ CRITICAL: Return empty immediately if no source filters
   if (!filters.source || filters.source.length === 0) {
-    console.log('⚠️ [PROCESS] No source filter provided - returning empty array');
+    // No source filter provided
     return [];
   }
 
@@ -25,7 +23,7 @@ export const processAlerts = (
   const shouldProcessOCI = filters.source.includes('Infrastructure Alerts');
   const shouldProcessHeartbeat = filters.source.includes('Application Heartbeat');
 
-  console.log('🔍 [PROCESS] Processing flags - Graylog:', shouldProcessGraylog, 'OCI:', shouldProcessOCI, 'Heartbeat:', shouldProcessHeartbeat);
+  // Processing flags determined
 
   // Helper: Determine if an OCI alert is database-related
   // ✅ FIXED: Only match alerts that contain "DB" or "DATABASE" words
@@ -96,7 +94,7 @@ export const processAlerts = (
 
   // Process Graylog alerts ONLY for Application Logs
   if (shouldProcessGraylog && graylogAlerts.length > 0) {
-    console.log('📋 [PROCESS] Processing', graylogAlerts.length, 'Graylog alerts for Application Logs');
+    // Processing Graylog alerts
     graylogAlerts.forEach((alert, index) => {
       const source: 'Application Logs' = 'Application Logs';
       const severity = mapSeverity(alert.severity, source);
@@ -119,15 +117,15 @@ export const processAlerts = (
       };
 
       processedAlerts.push(processedAlert);
-      console.log(`📋 [PROCESS] Added Graylog alert: ${processedAlert.title}`);
+      // Added Graylog alert
     });
   } else if (shouldProcessGraylog) {
-    console.log('📋 [PROCESS] Should process Graylog but no alerts provided');
+    // Should process Graylog but no alerts provided
   }
 
   // Process OCI alerts ONLY for Infrastructure Alerts  
   if (shouldProcessOCI && ociAlerts.length > 0) {
-    console.log('🏗️ [PROCESS] Processing', ociAlerts.length, 'OCI alerts for Infrastructure Alerts');
+    // Processing OCI alerts
     ociAlerts.forEach((alert, index) => {
       const source: 'Infrastructure Alerts' = 'Infrastructure Alerts';
       const severity = mapSeverity(alert.severity, source);
@@ -172,15 +170,15 @@ export const processAlerts = (
       };
 
       processedAlerts.push(processedAlert);
-      console.log(`🏗️ [PROCESS] Added Infrastructure alert: ${processedAlert.title}`);
+      // Added Infrastructure alert
     });
   } else if (shouldProcessOCI) {
-    console.log('🏗️ [PROCESS] Should process OCI but no alerts provided');
+    // Should process OCI but no alerts provided
   }
 
   // Process Heartbeat alerts ONLY for Application Heartbeat
   if (shouldProcessHeartbeat && heartbeatAlerts.length > 0) {
-    console.log('💓 [PROCESS] Processing', heartbeatAlerts.length, 'Heartbeat alerts for Application Heartbeat');
+    // Processing Heartbeat alerts
     heartbeatAlerts.forEach((alert, index) => {
       const source: 'Application Heartbeat' = 'Application Heartbeat';
       const severity = mapSeverity(alert.severity, source);
@@ -201,20 +199,20 @@ export const processAlerts = (
       };
 
       processedAlerts.push(processedAlert);
-      console.log(`💓 [PROCESS] Added Heartbeat alert: ${processedAlert.title}`);
+      // Added Heartbeat alert
     });
   } else if (shouldProcessHeartbeat) {
-    console.log('💓 [PROCESS] Should process Heartbeat but no alerts provided');
+    // Should process Heartbeat but no alerts provided
   }
 
-  console.log('✅ [PROCESS] Total processed alerts:', processedAlerts.length);
+  // Total processed alerts
   
   // ✅ VALIDATION: Check that all alerts have correct sources
   const sourceDistribution = processedAlerts.reduce((acc, alert) => {
     acc[alert.source] = (acc[alert.source] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
-  console.log('✅ [PROCESS] Source distribution:', sourceDistribution);
+  // Source distribution
 
   // ✅ DETECT CONTAMINATION
   processedAlerts.forEach(alert => {
@@ -235,7 +233,7 @@ export const processAlerts = (
     filteredAlerts = filteredAlerts.filter(alert => 
       filters.severity.includes(alert.severity)
     );
-    console.log(`🔍 [FILTER] Severity filter: ${beforeCount} → ${filteredAlerts.length}`);
+    // Severity filter applied
   }
 
   // ✅ Source filter should be redundant now, but keep as safety
@@ -248,7 +246,7 @@ export const processAlerts = (
       }
       return isAllowed;
     });
-    console.log(`🔒 [FILTER] Source safety filter: ${beforeCount} → ${filteredAlerts.length}`);
+    // Source safety filter applied
   }
 
   if (filters.channel?.length > 0) {
@@ -352,6 +350,6 @@ export const processAlerts = (
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
-  console.log('✅ [PROCESS] Final result:', sortedAlerts.length, 'alerts');
+  // Final result processed
   return sortedAlerts;
 };
