@@ -32,8 +32,8 @@ export const HeartbeatMetrics = ({ selectedCategory }: HeartbeatMetricsProps) =>
 
   // Configuration
   const config = {
-    wsUrl: 'wss://hbc.hbssweb.com:4950',
-    refreshInterval: 1 * 60 * 1000, // 1 minute
+    wsUrl: import.meta.env.VITE_WS_URL,
+    refreshInterval: 3 * 60 * 1000, // 3 minutes
     timeout: 10000, // 10 seconds timeout
     debug: true
   };

@@ -4,36 +4,67 @@ services:
   backend:
     build:
       context: ./oci-alert-backend
+      dockerfile: Dockerfile
     container_name: oci-alert-dashboard-backend
     ports:
-      - "5000:5000"
+      # PRODUCTION: Change BACKEND_PORT in .env file (default: 5001)
+      - "${BACKEND_PORT:-5000}:5000"
     volumes:
-      - "C:/Users/Vaibhav Malhotra/.oci:/root/.oci:ro"
+      # PRODUCTION: Change OCI_CONFIG_PATH in .env file to your OCI config directory
+      - "${OCI_CONFIG_PATH:-C:/Users/Vaibhav Malhotra/.oci}:/root/.oci:ro"
+      # Persistent database storage - data survives container restarts
+      - "oci-db-data:/app/data"
     environment:
-      - MONGO_URI=mongodb+srv://vamalhotra751:123@cluster0.pwebx01.mongodb.net/alertDB?retryWrites=true&w=majority&appName=Cluster0
-      # ADMIN CREDENTIALS - Change these to update admin login
-      # Password must have: 2+ uppercase, 2+ lowercase, 2+ digits, 2+ special chars, 12+ length
-      # Cannot contain: hbss, qyryde (case insensitive)
-      - ADMIN_USERNAME=himalhotra751@gmail.com
-      - ADMIN_PASSWORD=Highwaterfa11s@2912#V 
-      - SQLITE_DB_PATH=./users.sqlite
-      - JWT_SECRET=aB7@xYz!pQ3#tUvW2&nM5*oJ8^rT1
-      - PORT=5000
-    restart: always
+      # PRODUCTION: MUST CHANGE these credentials in .env file
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-himalhotra751@gmail.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Highwaterfa11s@2912#V}
+      - SQLITE_DB_PATH=${SQLITE_DB_PATH:-/app/data/users.sqlite}
+      - JWT_SECRET=${JWT_SECRET:-aB7@xYz!pQ3#tUvW2&nM5*oJ8^rT1}
+      - PORT=${BACKEND_PORT:-5000}
+      - NODE_ENV=${NODE_ENV:-development}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - app-network
 
   frontend:
     build:
       context: ./alert-frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_WS_URL=${VITE_WS_URL}
     container_name: oci-alert-dashboard-frontend
     ports:
-      - "3000:80"
-    restart: always
+      # PRODUCTION: Change FRONTEND_PORT in .env file (default: 1013)
+      - "${FRONTEND_PORT:-3000}:80"
+    environment:
+      # PRODUCTION: Change VITE_API_URL in .env file to your domain
+      - VITE_API_URL=${VITE_API_URL}
+      # WebSocket URL for heartbeat monitoring (usually no change needed)
+      - VITE_WS_URL=${VITE_WS_URL}
+      - NODE_ENV=${NODE_ENV:-development}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - app-network
+
+volumes:
+  oci-db-data:
+    driver: local
 
 networks:
   app-network:

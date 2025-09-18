@@ -8,11 +8,52 @@ const bcrypt = require('bcrypt');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
+
+// Validate that PORT environment variable is set
+if (!PORT) {
+  console.error('❌ [ERROR] PORT environment variable is required but not set');
+  console.error('❌ [ERROR] Please set PORT environment variable (e.g., PORT=5000)');
+  process.exit(1);
+}
+
+// Enhanced logging middleware
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`\n🔍 [${timestamp}] ${req.method} ${req.path}`);
+  console.log(`📥 Headers:`, JSON.stringify(req.headers, null, 2));
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log(`📦 Body:`, JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow all origins for now - you can restrict this in production
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+};
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Handle preflight OPTIONS requests
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // Import routes
 const ociRoutes = require('./routes/oci');
@@ -73,12 +114,13 @@ function validateAdminPassword(password) {
 
 // Initialize SQLite database for auth - CHANGED TO users.sqlite
 const sqliteDbPath = process.env.SQLITE_DB_PATH || path.join(__dirname, 'users.sqlite');
+console.log(`🗄️ [SQLITE] Database path: ${sqliteDbPath}`);
 const sqliteDb = new sqlite3.Database(sqliteDbPath, (err) => {
   if (err) {
-    console.error('❌ Failed to connect to SQLite:', err.message);
+    console.error('❌ [SQLITE] Failed to connect to SQLite:', err.message);
     return;
   }
-  // Connected to SQLite auth database
+  console.log('✅ [SQLITE] Connected to SQLite auth database');
 });
 
 // Create table if not exists - UPDATED WITH ROLE COLUMN
@@ -103,70 +145,93 @@ sqliteDb.serialize(() => {
     }
   );
 
+  // Add CREATED_AT column if it doesn't exist (for existing databases)
+  sqliteDb.run(
+    `ALTER TABLE ALERTS_USERPROFILE ADD COLUMN CREATED_AT DATETIME DEFAULT CURRENT_TIMESTAMP;`,
+    (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Error adding CREATED_AT column:', err.message);
+      } else {
+        console.log('✅ [SQLITE] CREATED_AT column ensured');
+      }
+    }
+  );
+
   // SEED ADMIN ACCOUNT
-  const adminUsername = process.env.ADMIN_USERNAME || 'admin@company.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'AdminPass123!@#';
+  const adminUsername = process.env.ADMIN_USERNAME;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  
+  console.log(`👤 [ADMIN] Username: ${adminUsername}`);
+  console.log(`🔐 [ADMIN] Password: ${adminPassword.substring(0, 3)}***`);
   
   // Validate admin password
   const passwordValidation = validateAdminPassword(adminPassword);
   if (!passwordValidation.valid) {
-    console.error('❌ Invalid admin password:', passwordValidation.error);
-    console.error('❌ Please update ADMIN_PASSWORD in docker-compose.yml with a valid password');
+    console.error('❌ [ADMIN] Invalid admin password:', passwordValidation.error);
+    console.error('❌ [ADMIN] Please update ADMIN_PASSWORD in docker-compose.yml with a valid password');
     return;
   }
   
-  // Admin credentials validated
+  console.log('✅ [ADMIN] Admin credentials validated');
   
   // Check if admin exists and update password if needed
+  console.log(`🔍 [SQLITE] Checking for existing admin user...`);
   sqliteDb.get(
     `SELECT USER_ID, USER_PSWD FROM ALERTS_USERPROFILE WHERE USER_ROLE = 'admin'`,
     async (err, row) => {
       if (err) {
-        console.error('Error checking for admin:', err.message);
+        console.error('❌ [SQLITE] Error checking for admin:', err.message);
         return;
       }
       
       if (!row) {
+        console.log('👤 [ADMIN] Admin user not found, creating new account...');
         // Create admin account
         try {
           const hashedPassword = await bcrypt.hash(adminPassword, 10);
+          console.log(`🔐 [ADMIN] Password hashed successfully`);
           sqliteDb.run(
-            `INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE) VALUES (?, ?, ?, ?)`,
+            `INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE, CREATED_AT) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
             [adminUsername, hashedPassword, 'Infrastructure Alerts,Application Logs,Application Heartbeat', 'admin'],
             function(err) {
               if (err) {
-                console.error('❌ Failed to create admin account:', err.message);
+                console.error('❌ [SQLITE] Failed to create admin account:', err.message);
               } else {
-                // Admin account created successfully
+                console.log('✅ [ADMIN] Admin account created successfully');
+                console.log(`📊 [ADMIN] User ID: ${this.lastID}`);
               }
             }
           );
         } catch (hashError) {
-          console.error('❌ Failed to hash admin password:', hashError.message);
+          console.error('❌ [ADMIN] Failed to hash admin password:', hashError.message);
         }
       } else {
+        console.log(`👤 [ADMIN] Admin user found: ${row.USER_ID}`);
         // Admin exists, verify password matches current environment
         const passwordMatch = await bcrypt.compare(adminPassword, row.USER_PSWD);
         if (!passwordMatch) {
+          console.log('🔐 [ADMIN] Password mismatch, updating admin password...');
           // Updating admin password
           try {
             const hashedPassword = await bcrypt.hash(adminPassword, 10);
+            console.log(`🔐 [ADMIN] New password hashed successfully`);
             sqliteDb.run(
               `UPDATE ALERTS_USERPROFILE SET USER_PSWD = ? WHERE USER_ID = ?`,
               [hashedPassword, adminUsername],
               function(err) {
                 if (err) {
-                  console.error('❌ Failed to update admin password:', err.message);
+                  console.error('❌ [SQLITE] Failed to update admin password:', err.message);
                 } else {
-                  // Admin password updated successfully
+                  console.log('✅ [ADMIN] Admin password updated successfully');
+                  console.log(`📊 [ADMIN] Rows affected: ${this.changes}`);
                 }
               }
             );
           } catch (hashError) {
-            console.error('❌ Failed to hash admin password:', hashError.message);
+            console.error('❌ [ADMIN] Failed to hash admin password:', hashError.message);
           }
         } else {
-          // Admin account ready
+          console.log('✅ [ADMIN] Admin account ready - password matches');
         }
       }
     }
@@ -195,8 +260,8 @@ app.get('/debug/users', (req, res) => {
 // DEBUG: Reset admin user endpoint
 app.post('/debug/reset-admin', async (req, res) => {
   try {
-    const adminUsername = process.env.ADMIN_USERNAME || 'admin@company.com';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'AdminPass123!@#';
+    const adminUsername = process.env.ADMIN_USERNAME;
+    const adminPassword = process.env.ADMIN_PASSWORD;
     
     // Validate password before reset
     const passwordValidation = validateAdminPassword(adminPassword);
@@ -218,7 +283,7 @@ app.post('/debug/reset-admin', async (req, res) => {
         }
 
         sqliteDb.run(
-          'INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE) VALUES (?, ?, ?, ?)',
+          'INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE, CREATED_AT) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
           [adminUsername, hashedPassword, 'Infrastructure Alerts,Application Logs,Application Heartbeat', 'admin'],
           (err) => {
             if (err) {

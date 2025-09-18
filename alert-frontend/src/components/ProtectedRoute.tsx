@@ -11,17 +11,29 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log('\n🛡️ [PROTECTED] Checking route protection...');
+    console.log(`🔒 [PROTECTED] Require admin: ${requireAdmin}`);
+    
     // Check if the user is authenticated. If not, redirect to the login page.
     if (!isAuthenticated()) {
-      // User not authenticated
+      console.log('❌ [PROTECTED] User not authenticated, redirecting to login');
       navigate('/login');
       return;
     }
 
+    console.log('✅ [PROTECTED] User is authenticated');
+
     // If the route requires an admin and the user is not an admin, redirect them.
     if (requireAdmin && !isAdmin()) {
-      // User is not an admin
+      console.log('❌ [PROTECTED] User is not admin, redirecting to login');
       navigate('/login');
+      return;
+    }
+
+    if (requireAdmin) {
+      console.log('✅ [PROTECTED] User is admin, access granted');
+    } else {
+      console.log('✅ [PROTECTED] User access granted');
     }
   }, [navigate, requireAdmin]);
 

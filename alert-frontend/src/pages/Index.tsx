@@ -103,8 +103,8 @@ const Index = () => {
     // Initial fetch with delay to stagger requests
     const initialTimeout = setTimeout(fetchHeartbeatCount, 1000);
     
-    // Set up polling every 60 seconds (reduced frequency)
-    const interval = setInterval(fetchHeartbeatCount, 60000);
+    // Set up polling every 3 minutes
+    const interval = setInterval(fetchHeartbeatCount, 180000);
     
     return () => {
       clearTimeout(initialTimeout);
@@ -169,8 +169,8 @@ const Index = () => {
     // Initial fetch with delay to stagger requests
     const initialTimeout = setTimeout(fetchInfrastructureCount, 3000);
     
-    // Set up polling every 10 minutes (increased from 5 minutes to reduce load)
-    const interval = setInterval(fetchInfrastructureCount, 600000);
+    // Set up polling every 7 minutes
+    const interval = setInterval(fetchInfrastructureCount, 420000);
     
     return () => {
       clearTimeout(initialTimeout);

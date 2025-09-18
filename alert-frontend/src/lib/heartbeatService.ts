@@ -23,11 +23,12 @@ export interface HeartbeatAlert {
 
 class HeartbeatService {
   private config = {
-    wsUrl: 'wss://hbc.hbssweb.com:4950',
+    wsUrl: import.meta.env.VITE_WS_URL,
     timeout: 15000, // Increased timeout
     debug: true,
     maxRetries: 2,
-    retryDelay: 3000
+    retryDelay: 3000,
+    refreshInterval: 3 * 60 * 1000 // 3 minutes
   };
 
   private isErrorStatus = (status: string): boolean => {

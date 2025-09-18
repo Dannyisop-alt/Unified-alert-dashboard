@@ -7,10 +7,18 @@ const EMAIL_KEY = 'auth_email';
 const ROLE_KEY = 'auth_role';
 
 export function saveAuth(token: string, access: string[], email?: string, role?: UserRole) {
+  console.log('💾 [AUTH] Saving authentication data...');
+  console.log(`🎫 [AUTH] Token: ${token.substring(0, 50)}...`);
+  console.log(`📋 [AUTH] Access: ${JSON.stringify(access)}`);
+  console.log(`📧 [AUTH] Email: ${email}`);
+  console.log(`👑 [AUTH] Role: ${role}`);
+  
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(ACCESS_KEY, JSON.stringify(access));
   if (email) localStorage.setItem(EMAIL_KEY, email);
   if (role) localStorage.setItem(ROLE_KEY, role);
+  
+  console.log('✅ [AUTH] Authentication data saved to localStorage');
 }
 
 export function clearAuth() {
@@ -43,11 +51,20 @@ export function getEmail(): string | null {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  const token = getToken();
+  const hasToken = !!token;
+  console.log(`🔍 [AUTH] Checking authentication: ${hasToken ? 'AUTHENTICATED' : 'NOT AUTHENTICATED'}`);
+  if (hasToken) {
+    console.log(`🎫 [AUTH] Token: ${token.substring(0, 50)}...`);
+  }
+  return hasToken;
 }
 
 export function isAdmin(): boolean {
-  return getRole() === 'admin';
+  const role = getRole();
+  const isAdminUser = role === 'admin';
+  console.log(`👑 [AUTH] Checking admin status: ${isAdminUser ? 'ADMIN' : 'USER'} (role: ${role})`);
+  return isAdminUser;
 }
 
 

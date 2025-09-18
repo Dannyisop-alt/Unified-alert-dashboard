@@ -28,39 +28,59 @@ function validateAccessList(accessCsv) {
 // PUBLIC LOGIN ROUTE - Only available route for non-authenticated users
 router.post('/login', async (req, res) => {
   try {
+    console.log('🔐 [LOGIN] Starting login process...');
     const db = req.app.locals.sqliteDb;
     const { email, password } = req.body || {};
+    
+    console.log(`📧 [LOGIN] Email: ${email}`);
+    console.log(`🔑 [LOGIN] Password: ${password ? password.substring(0, 3) + '***' : 'undefined'}`);
+    
     if (!email || !password) {
+      console.log('❌ [LOGIN] Missing email or password');
       return res.status(400).json({ error: 'email and password are required' });
     }
 
     const selectSql = `SELECT USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE FROM ALERTS_USERPROFILE WHERE USER_ID = ?`;
+    console.log(`🔍 [SQLITE] Executing query: ${selectSql}`);
+    console.log(`🔍 [SQLITE] Query parameters: [${email}]`);
     
     db.get(selectSql, [email], async (err, row) => {
       if (err) {
-        console.error('❌ SQLite select error:', err);
+        console.error('❌ [SQLITE] Select error:', err);
         return res.status(500).json({ error: 'Failed to login' });
       }
       
       if (!row) {
+        console.log('❌ [LOGIN] User not found in database');
         return res.status(401).json({ error: 'Invalid credentials' });
       }
+
+      console.log('👤 [LOGIN] User found:', row.USER_ID);
+      console.log('🔐 [LOGIN] Stored password hash:', row.USER_PSWD.substring(0, 10) + '...');
+      console.log('🔍 [LOGIN] Comparing passwords...');
 
       const match = await bcrypt.compare(password, row.USER_PSWD);
       if (!match) {
+        console.log('❌ [LOGIN] Password comparison failed');
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
+      console.log('✅ [LOGIN] Password comparison successful');
       const accessArray = row.USER_ALERTS_ACCESS.split(',').map((s) => s.trim()).filter(Boolean);
+      console.log('🎫 [LOGIN] User access:', accessArray);
+      
       const token = jwt.sign(
         { 
           email: row.USER_ID, 
           access: accessArray,
           role: row.USER_ROLE || 'user'
         },
-        process.env.JWT_SECRET || 'change_this_secret',
+        process.env.JWT_SECRET,
         { expiresIn: '12h' }
       );
+
+      console.log('✅ [LOGIN] JWT token created successfully');
+      console.log('🎉 [LOGIN] Login successful for user:', row.USER_ID);
 
       return res.json({
         token,
@@ -69,7 +89,7 @@ router.post('/login', async (req, res) => {
       });
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ [LOGIN] Login error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -105,7 +125,7 @@ router.post('/admin/create-user', authenticateJWT, requireAdmin, async (req, res
     const saltRounds = 10;
     const hashed = await bcrypt.hash(password, saltRounds);
 
-    const insertSql = `INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE) VALUES (?, ?, ?, ?)`;
+    const insertSql = `INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE, CREATED_AT) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`;
     db.run(insertSql, [email, hashed, access, 'user'], function (err) {
       if (err) {
         if (err.message && err.message.includes('UNIQUE constraint failed')) {

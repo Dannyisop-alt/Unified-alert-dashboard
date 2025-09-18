@@ -1,7 +1,7 @@
 import type { GraylogAlert, OCIAlert } from '@/types/alerts';
 import { getToken } from '@/lib/auth';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 // Helper function to retry failed requests
 const retryRequest = async <T>(
@@ -54,6 +54,9 @@ export const api = {
     limit?: number;
   }): Promise<OCIAlert[]> {
     return retryRequest(async () => {
+      console.log('\n🏗️ [API] Fetching OCI alerts...');
+      console.log(`📋 [API] Parameters: ${JSON.stringify(params)}`);
+      
       const url = new URL(`${API_BASE_URL}/oci-alerts`);
       if (params?.severity) url.searchParams.set('severity', params.severity);
       if (params?.vm) url.searchParams.set('vm', params.vm);
@@ -62,16 +65,32 @@ export const api = {
       if (params?.alertType) url.searchParams.set('alertType', params.alertType);
       if (params?.limit) url.searchParams.set('limit', params.limit.toString());
       
+      console.log(`🌐 [API] URL: ${url.toString()}`);
+      
+      const token = getToken();
+      console.log(`🎫 [API] Token: ${token ? token.substring(0, 50) + '...' : 'MISSING'}`);
+      
       const response = await fetch(url.toString(), {
         headers: {
-          'Authorization': `Bearer ${getToken()}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         // Add timeout to prevent hanging requests
         signal: AbortSignal.timeout(60000) // 60 second timeout for OCI
       });
-      if (!response.ok) throw new Error(`Failed to fetch OCI alerts: ${response.statusText}`);
-      return response.json();
+      
+      console.log(`📡 [API] Response status: ${response.status}`);
+      console.log(`📡 [API] Response headers:`, Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log(`❌ [API] Error response: ${errorText}`);
+        throw new Error(`Failed to fetch OCI alerts: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log(`✅ [API] OCI alerts fetched: ${data.length} alerts`);
+      return data;
     }, 2, 3000); // 2 retries with 3 second initial delay
   },
 

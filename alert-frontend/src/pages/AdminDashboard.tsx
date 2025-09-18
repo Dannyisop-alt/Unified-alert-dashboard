@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { getToken, clearAuth, getEmail, isAdmin } from '@/lib/auth';
 import { UserPlus, Edit, LogOut, Users, Trash2, LayoutDashboard } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 interface User {
   email: string;
