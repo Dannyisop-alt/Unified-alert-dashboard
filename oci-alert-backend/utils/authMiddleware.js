@@ -14,7 +14,7 @@ function authenticateJWT(req, res, next) {
   console.log(`🎫 [JWT] Token: ${token.substring(0, 50)}...`);
   
   try {
-    const jwtSecret = process.env.JWT_SECRET;
+    const jwtSecret = process.env.JWT_SECRET || 'change_this_secret';
     console.log(`🔐 [JWT] Secret: ${jwtSecret.substring(0, 10)}...`);
     
     const payload = jwt.verify(token, jwtSecret);

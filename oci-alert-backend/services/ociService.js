@@ -204,6 +204,8 @@ async function getOCIAlerts() {
         const alarmsResponse = await monitoringClient.listAlarms(alarmsRequest);
         // Alarms fetched successfully
         
+        console.log(`🔍 [DEBUG] Found ${alarmsResponse.items.length} alarms from listAlarms`);
+        
         const alerts = [];
         
         // 3. ✅ OPTIMIZED: Batch process alarms with parallel execution
@@ -228,42 +230,97 @@ async function getOCIAlerts() {
             // ✅ Process batch in parallel
             const batchPromises = batch.map(async (alarm, index) => {
                 try {
+                    // Debug: Log raw alarm data structure from listAlarms
+                    console.log(`🔍 [DEBUG] Processing alarm ${alarm.id}:`, {
+                        displayName: alarm.displayName,
+                        dimensions: alarm.dimensions,
+                        metric: alarm.metric,
+                        severity: alarm.severity
+                    });
+
+                    // Get detailed alarm information to access dimensions and metric data
+                    let detailedAlarm = alarm;
+                    try {
+                        const alarmDetails = await monitoringClient.getAlarm({
+                            alarmId: alarm.id
+                        });
+                        detailedAlarm = alarmDetails.alarm;
+                        console.log(`🔍 [DEBUG] Got detailed alarm data for ${alarm.id}:`, {
+                            displayName: detailedAlarm.displayName,
+                            dimensions: detailedAlarm.dimensions,
+                            metric: detailedAlarm.metric,
+                            severity: detailedAlarm.severity
+                        });
+                    } catch (detailError) {
+                        console.log(`⚠️ [DEBUG] Could not get detailed alarm data for ${alarm.id}:`, detailError.message);
+                    }
+
                     // ✅ Fast VM extraction using cached instance map
-                    const { vmName } = await extractVmInfo(alarm, instanceMap);
+                    const { vmName } = await extractVmInfo(detailedAlarm, instanceMap);
                     
                     // ✅ Fast tenant extraction using cache
                     let tenantName;
-                    if (compartmentCache.has(alarm.compartmentId)) {
-                        tenantName = compartmentCache.get(alarm.compartmentId);
+                    if (compartmentCache.has(detailedAlarm.compartmentId)) {
+                        tenantName = compartmentCache.get(detailedAlarm.compartmentId);
                     } else {
-                        tenantName = await getCompartmentName(alarm.compartmentId);
-                        compartmentCache.set(alarm.compartmentId, tenantName);
+                        tenantName = await getCompartmentName(detailedAlarm.compartmentId);
+                        compartmentCache.set(detailedAlarm.compartmentId, tenantName);
                     }
                     
                     // ✅ Fast timestamp extraction
-                    const alertTimestamp = alarm.timeUpdated ? 
-                        new Date(alarm.timeUpdated).toISOString() : 
-                        alarm.timeCreated ? 
-                        new Date(alarm.timeCreated).toISOString() : 
+                    const alertTimestamp = detailedAlarm.timeUpdated ? 
+                        new Date(detailedAlarm.timeUpdated).toISOString() : 
+                        detailedAlarm.timeCreated ? 
+                        new Date(detailedAlarm.timeCreated).toISOString() : 
                         new Date().toISOString();
                     
-                    const message = alarm.body || alarm.displayName;
+                    const message = detailedAlarm.body || detailedAlarm.displayName;
                     
-                    return {
-                        id: alarm.id,
-                        severity: alarm.severity.toLowerCase(),
+                    // Extract resourceDisplayName from dimensions
+                    let resourceDisplayName = 'N/A';
+                    if (detailedAlarm.dimensions && detailedAlarm.dimensions.resourceDisplayName) {
+                        resourceDisplayName = detailedAlarm.dimensions.resourceDisplayName;
+                    }
+
+                    // Extract metric values from dimensions
+                    let metricValues = {};
+                    if (detailedAlarm.dimensions) {
+                        // Look for metric values in dimensions (like CpuUtilization[5m].percentile(.90))
+                        Object.keys(detailedAlarm.dimensions).forEach(key => {
+                            if (key.includes('[') && key.includes(']') && key.includes('.')) {
+                                // This looks like a metric value key
+                                metricValues[key] = detailedAlarm.dimensions[key];
+                            }
+                        });
+                    }
+
+                    const alertData = {
+                        id: detailedAlarm.id,
+                        severity: detailedAlarm.severity.toLowerCase(),
                         message: message,
                         vm: vmName, 
                         tenant: tenantName,
                         region: provider.getRegion().regionId, 
-                        compartment: alarm.compartmentId,
+                        compartment: detailedAlarm.compartmentId,
                         alertType: 'OCI_ALARM',
-                        metricName: alarm.metric,
-                        threshold: alarm.threshold,
+                        metricName: detailedAlarm.metric,
+                        threshold: detailedAlarm.threshold,
                         currentValue: undefined,
                         unit: undefined,
+                        resourceDisplayName: resourceDisplayName,
+                        metricValues: metricValues,
                         timestamp: alertTimestamp
                     };
+
+                    // Debug logging for new fields
+                    if (resourceDisplayName && resourceDisplayName !== 'N/A') {
+                        console.log(`🔍 [DEBUG] Found resourceDisplayName: ${resourceDisplayName} for alarm ${alarm.id}`);
+                    }
+                    if (Object.keys(metricValues).length > 0) {
+                        console.log(`🔍 [DEBUG] Found metricValues:`, metricValues, `for alarm ${alarm.id}`);
+                    }
+
+                    return alertData;
                     
                 } catch (alarmError) {
                     console.error(`❌ [BATCH ${batchIndex + 1}] Error processing alarm ${alarm.displayName}:`, alarmError.message);

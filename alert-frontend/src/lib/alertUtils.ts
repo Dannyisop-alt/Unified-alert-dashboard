@@ -30,8 +30,11 @@ export const processAlerts = (
   const isDatabaseAlert = (alert: OCIAlert): boolean => {
     const vmName = (alert.vm || '').toLowerCase();
     const message = (alert.message || '').toLowerCase();
+    const title = (alert.title || '').toLowerCase();
     const metricName = (alert.metricName || '').toLowerCase();
     const alertType = (alert.alertType || '').toLowerCase();
+    const resourceDisplayName = (alert.resourceDisplayName || '').toLowerCase();
+    const alarmSummary = (alert.alarmSummary || '').toLowerCase();
     
     // ✅ STRICT: Only check for explicit "DB" or "DATABASE" patterns
     const dbPatterns = [
@@ -48,6 +51,11 @@ export const processAlerts = (
       return true;
     }
     
+    // Check title for DB patterns (new webhook format)
+    if (dbPatterns.some(pattern => title.includes(pattern))) {
+      return true;
+    }
+    
     // Check metric name for DB patterns
     if (dbPatterns.some(pattern => metricName.includes(pattern))) {
       return true;
@@ -58,11 +66,29 @@ export const processAlerts = (
       return true;
     }
     
+    // Check resource display name for DB patterns
+    if (dbPatterns.some(pattern => resourceDisplayName.includes(pattern))) {
+      return true;
+    }
+    
+    // Check alarm summary for DB patterns (new webhook format)
+    if (dbPatterns.some(pattern => alarmSummary.includes(pattern))) {
+      return true;
+    }
+    
     // ✅ SPECIFIC: Check for known database alert patterns in your system
     if (message.includes('pht_database_session_alarm') || 
         message.includes('gatra_sessions_alert') ||
         message.includes('dtc-db_alert') ||
-        message.includes('qrydedb_')) {
+        message.includes('qrydedb_') ||
+        title.includes('pht_database_session_alarm') || 
+        title.includes('gatra_sessions_alert') ||
+        title.includes('dtc-db_alert') ||
+        title.includes('qrydedb_') ||
+        alarmSummary.includes('pht_database_session_alarm') || 
+        alarmSummary.includes('gatra_sessions_alert') ||
+        alarmSummary.includes('dtc-db_alert') ||
+        alarmSummary.includes('qrydedb_')) {
       return true;
     }
     
@@ -130,8 +156,31 @@ export const processAlerts = (
       const source: 'Infrastructure Alerts' = 'Infrastructure Alerts';
       const severity = mapSeverity(alert.severity, source);
 
-      // Clean up alert title
-      let alertTitle = alert.message || 'No title available';
+      // Use title from new webhook format if available, otherwise fall back to message
+      let alertTitle = alert.title || alert.message || 'No title available';
+      
+      // Clean up alert title - remove OCI prefixes
+      alertTitle = alertTitle.replace(/^(OCI_|ALARM_|ERROR_)/i, '');
+      
+      // For new webhook format, don't add metric info to title as it will be shown separately
+      // For old format, show metric information in the title
+      if (!alert.title && alert.metricValues && Object.keys(alert.metricValues).length > 0) {
+        try {
+          const metricInfo = Object.entries(alert.metricValues)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(', ');
+          alertTitle = `${alertTitle} - ${metricInfo}`;
+        } catch (error) {
+          console.warn('Error processing metric values:', error);
+          // Fallback to just showing the alert title
+        }
+      } else if (!alert.title && alert.query) {
+        // Extract metric from query if no metricValues available
+        const queryMatch = alert.query.match(/^([A-Za-z]+)\[/);
+        if (queryMatch) {
+          alertTitle = `${alertTitle} - ${queryMatch[1]}`;
+        }
+      }
       
       if (alertTitle.includes('Processing Error') || alertTitle.includes('OCI_ALARM_ERROR')) {
         if (alert.metricName && alert.metricName !== 'Unknown') {
@@ -146,19 +195,25 @@ export const processAlerts = (
       if (alertTitle.length > 100) {
         alertTitle = alertTitle.substring(0, 97) + '...';
       }
-      
-      alertTitle = alertTitle.replace(/^(OCI_|ALARM_|ERROR_)/i, '');
 
       const isDatabase = isDatabaseAlert(alert);
       const resourceType: 'Database' | 'Server' = isDatabase ? 'Database' : 'Server';
       const category: 'infrastructure' | 'database' = isDatabase ? 'database' : 'infrastructure';
+
+      // Debug logging for new fields
+      if (alert.resourceDisplayName && alert.resourceDisplayName !== 'N/A') {
+        console.log(`🔍 [FRONTEND DEBUG] Found resourceDisplayName: ${alert.resourceDisplayName} for alert ${alert._id || alert.timestamp}`);
+      }
+      if (alert.metricValues && Object.keys(alert.metricValues).length > 0) {
+        console.log(`🔍 [FRONTEND DEBUG] Found metricValues:`, alert.metricValues, `for alert ${alert._id || alert.timestamp}`);
+      }
 
       const processedAlert = {
         id: alert._id || `oci-${alert.timestamp}-${index}`, // Ensure unique IDs
         source, // ✅ MUST be 'Infrastructure Alerts'
         severity,
         title: alertTitle,
-        description: alert.message || 'No description available',
+        description: alert.alarmSummary || 'Infrastructure alert from OCI monitoring system',
         timestamp: alert.timestamp,
         site: alert.vm,
         category: category,
@@ -166,7 +221,19 @@ export const processAlerts = (
         compartment: alert.compartment,
         metricName: alert.metricName,
         tenant: alert.tenant,
-        resourceType: resourceType
+        resourceType: resourceType,
+        resourceDisplayName: alert.resourceDisplayName,
+        metricValues: alert.metricValues,
+        query: alert.query,
+        // New webhook format fields
+        alarmSummary: alert.alarmSummary,
+        shape: alert.shape,
+        availabilityDomain: alert.availabilityDomain,
+        faultDomain: alert.faultDomain,
+        instancePoolId: alert.instancePoolId,
+        // Status and timestamp fields
+        status: alert.status,
+        timestampEpochMillis: alert.timestampEpochMillis
       };
 
       processedAlerts.push(processedAlert);

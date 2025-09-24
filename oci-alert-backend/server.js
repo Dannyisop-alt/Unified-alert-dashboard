@@ -34,8 +34,23 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow all origins for now - you can restrict this in production
-    return callback(null, true);
+    // Get allowed origins from environment variable
+    const allowedOrigins = process.env.CORS_ORIGIN ? 
+      process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : 
+      ['*'];
+    
+    // Allow all origins if CORS_ORIGIN is set to '*'
+    if (allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    console.log(`❌ [CORS] Blocked origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -59,6 +74,7 @@ app.options('*', (req, res) => {
 const ociRoutes = require('./routes/oci');
 const graylogRoutes = require('./routes/graylog');
 const authRoutes = require('./routes/auth');
+const webhookRoutes = require('./routes/webhook');
 const { authenticateJWT } = require('./utils/authMiddleware');
 
 // Auth routes (unprotected)
@@ -66,6 +82,9 @@ app.use('/auth', authRoutes);
 
 // Graylog alerts (unprotected - no auth required)
 app.use('/graylog-alerts', graylogRoutes);
+
+// Webhook routes (unprotected - for OCI to send alerts)
+app.use('/webhook', webhookRoutes);
 
 // Protected routes
 app.use('/oci-alerts', authenticateJWT, ociRoutes);
@@ -87,6 +106,14 @@ app.get('/', (req, res) => res.send('🚀 Server is up and running'));
 // Start server (no MongoDB dependency)
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 CORS Origins: ${process.env.CORS_ORIGIN || '*'}`);
+  const baseUrl = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging' 
+    ? 'https://transitdemo.qryde.net' 
+    : `http://localhost:${PORT}`;
+  console.log(`📡 Webhook endpoint: ${baseUrl}/webhook/oci-alerts`);
+  console.log(`🔌 SSE endpoint: ${baseUrl}/webhook/stream`);
+  console.log(`❤️  Health check: ${baseUrl}/health`);
 });
 
 // Password validation function

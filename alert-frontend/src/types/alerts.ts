@@ -24,8 +24,27 @@ export interface OCIAlert {
   threshold?: number;
   currentValue?: number;
   unit?: string;
+  resourceDisplayName?: string;
+  metricValues?: Record<string, string>;
+  query?: string;
   timestamp: string;
   read?: boolean;
+  // Webhook-specific fields (not sent to frontend)
+  webhookReceivedAt?: string;
+  alarmOCID?: string;
+  dedupeKey?: string;
+  imageId?: string;
+  resourceId?: string;
+  // New webhook format fields
+  alarmSummary?: string;
+  title?: string;
+  shape?: string;
+  availabilityDomain?: string;
+  faultDomain?: string;
+  instancePoolId?: string;
+  // New fields for status and timestamp display
+  status?: string;
+  timestampEpochMillis?: number;
 }
 
 export interface AlertFilters {
@@ -66,4 +85,16 @@ export interface ProcessedAlert {
   metricName?: string;
   tenant?: string;
   resourceType?: 'Database' | 'Server';
+  resourceDisplayName?: string;
+  metricValues?: Record<string, string>;
+  query?: string;
+  // New webhook format fields
+  alarmSummary?: string;
+  shape?: string;
+  availabilityDomain?: string;
+  faultDomain?: string;
+  instancePoolId?: string;
+  // New fields for status and timestamp display
+  status?: string;
+  timestampEpochMillis?: number;
 }

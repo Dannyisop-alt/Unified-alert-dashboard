@@ -17,47 +17,26 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
-    console.log('\n🔐 [LOGIN] Starting frontend login process...');
-    console.log(`📧 [LOGIN] Email: ${email}`);
-    console.log(`🔑 [LOGIN] Password: ${password.substring(0, 3)}***`);
-    console.log(`🌐 [LOGIN] API URL: ${API_BASE_URL}`);
-    
     try {
-      const requestBody = { email, password };
-      console.log(`📦 [LOGIN] Request body: ${JSON.stringify(requestBody)}`);
-      
       const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({ email, password })
       });
-      
-      console.log(`📡 [LOGIN] Response status: ${res.status}`);
-      console.log(`📡 [LOGIN] Response headers:`, Object.fromEntries(res.headers.entries()));
-      
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        console.log(`❌ [LOGIN] Error response: ${JSON.stringify(data)}`);
         throw new Error(data.error || 'Login failed');
       }
-      
       const data = await res.json();
-      console.log(`✅ [LOGIN] Success response: ${JSON.stringify(data, null, 2)}`);
-      
-      // Save authentication data including role
-      console.log('💾 [LOGIN] Saving authentication data...');
+      // Save token, access and role for ProtectedRoute checks
       saveAuth(data.token, data.access, email, data.role);
-      
-      console.log('🚀 [LOGIN] Redirecting to dashboard...');
       // Redirect all users (including admin) to alerts dashboard
       navigate('/dashboard', { replace: true });
-    } catch (err: any) {
-      console.error(`❌ [LOGIN] Login error:`, err);
+    } catch (err) {
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
@@ -94,8 +73,8 @@ export default function Login() {
             {error && (
               <div className="text-sm text-destructive">{error}</div>
             )}
-            <div className="flex justify-center">
-              <Button type="submit" disabled={loading} className="w-full">
+            <div className="flex items-center justify-center">
+              <Button type="submit" disabled={loading}>
                 {loading ? 'Signing in...' : 'Sign in'}
               </Button>
             </div>
@@ -105,3 +84,5 @@ export default function Login() {
     </div>
   );
 }
+
+

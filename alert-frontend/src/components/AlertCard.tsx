@@ -78,7 +78,13 @@ export const AlertCard = ({ alert }: AlertCardProps) => {
   
   // Safety check to ensure description is always a string
   const safeDescription = alert.description || 'No description available';
-  const shouldShowExpand = safeDescription.length > 100;
+  
+  // For Infrastructure Alerts, show expand button if there are additional details
+  // For other alerts, show expand button if description is long
+  const hasAdditionalDetails = alert.source === 'Infrastructure Alerts' && (
+    alert.query || alert.shape || alert.availabilityDomain || alert.faultDomain
+  );
+  const shouldShowExpand = hasAdditionalDetails || safeDescription.length > 100;
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -93,7 +99,7 @@ export const AlertCard = ({ alert }: AlertCardProps) => {
     });
   };
 
-  const truncatedDescription = shouldShowExpand 
+  const truncatedDescription = shouldShowExpand && alert.source !== 'Infrastructure Alerts'
     ? safeDescription.substring(0, 100) + '...' 
     : safeDescription;
 
@@ -124,55 +130,105 @@ export const AlertCard = ({ alert }: AlertCardProps) => {
                     {alert.region}
                   </Badge>
                 )}
-                {alert.tenant && (
-                  <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
-                    Tenant: {alert.tenant}
-                  </Badge>
-                )}
               </div>
               
               <div>
-                <h3 className="font-semibold mb-1 text-gray-900">
+                <h3 className="font-semibold mb-1 text-gray-900 text-base">
                   {alert.title || 'System Alert'}
                 </h3>
+                
+                {/* Show alarm summary for Infrastructure Alerts */}
+                {alert.source === 'Infrastructure Alerts' && alert.alarmSummary && (
+                  <div className="mb-2 text-sm text-gray-700">
+                    {alert.alarmSummary}
+                  </div>
+                )}
+                
+                {/* Show metrics right under the title for Infrastructure Alerts */}
+                {alert.source === 'Infrastructure Alerts' && alert.metricValues && Object.keys(alert.metricValues).length > 0 && (
+                  <div className="mb-2">
+                    <div className="space-y-1">
+                      {Object.entries(alert.metricValues).map(([key, value], index) => {
+                        // Create a safe key for React
+                        const safeKey = `metric-${index}-${String(key).replace(/[^a-zA-Z0-9]/g, '')}`;
+                        return (
+                          <div key={safeKey} className="flex items-center gap-2 text-sm">
+                            <span className="text-gray-600 font-medium">{String(key)}:</span>
+                            <span className="font-mono text-gray-800 font-semibold">{String(value)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="overflow-hidden">
                   <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-                    <div className="text-sm break-words text-gray-600">
-                      {isExpanded ? safeDescription : truncatedDescription}
-                    </div>
-                    {/* Show only non-sensitive OCI fields for Infrastructure Alerts */}
+                    {/* Show description for non-Infrastructure alerts */}
+                    {alert.source !== 'Infrastructure Alerts' && (
+                      <div className="text-sm break-words text-gray-600">
+                        {isExpanded ? safeDescription : truncatedDescription}
+                      </div>
+                    )}
+                    
+                    {/* Infrastructure Alerts - Query and Show More button */}
                     {alert.source === 'Infrastructure Alerts' && (
-                      <div className="mt-2 text-xs space-y-1 text-gray-500">
-                        {alert.region && (
-                          <div>
-                            <span className="font-medium">Region:</span> {alert.region}
+                      <div className="mt-2">
+                        {alert.query && (
+                          <div className="text-xs text-gray-500 mb-2">
+                            <span className="font-medium">Query:</span> 
+                            <span className="ml-1 font-mono">{alert.query}</span>
                           </div>
                         )}
-                        {alert.tenant && (
-                          <div>
-                            <span className="font-medium">Tenant:</span> {alert.tenant}
+                        
+                        {/* Show More button right after Query */}
+                        {shouldShowExpand && (
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="sm" className="p-0 h-auto text-xs hover:text-blue-800 text-blue-600">
+                              <span className="flex items-center gap-1">
+                                {isExpanded ? (
+                                  <>
+                                    Show Less
+                                    <ChevronUp className="h-3 w-3" />
+                                  </>
+                                ) : (
+                                  <>
+                                    Show More
+                                    <ChevronDown className="h-3 w-3" />
+                                  </>
+                                )}
+                              </span>
+                            </Button>
+                          </CollapsibleTrigger>
+                        )}
+                        
+                        {/* Show additional OCI fields when expanded */}
+                        {isExpanded && (
+                          <div className="mt-2 text-xs space-y-1 text-gray-500">
+                            {alert.status && (
+                              <div>
+                                <span className="font-medium">Status:</span> 
+                                <span className="ml-1">{alert.status}</span>
+                              </div>
+                            )}
+                            {alert.shape && (
+                              <div>
+                                <span className="font-medium">Shape:</span> {alert.shape}
+                              </div>
+                            )}
+                            {alert.availabilityDomain && (
+                              <div>
+                                <span className="font-medium">Availability Domain:</span> {alert.availabilityDomain}
+                              </div>
+                            )}
+                            {alert.faultDomain && (
+                              <div>
+                                <span className="font-medium">Fault Domain:</span> {alert.faultDomain}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
-                    {shouldShowExpand && (
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="mt-1 p-0 h-auto text-xs hover:text-blue-800 text-blue-600">
-                          <span className="flex items-center gap-1">
-                            {isExpanded ? (
-                              <>
-                                Show Less
-                                <ChevronUp className="h-3 w-3" />
-                              </>
-                            ) : (
-                              <>
-                                Show More
-                                <ChevronDown className="h-3 w-3" />
-                              </>
-                            )}
-                          </span>
-                        </Button>
-                      </CollapsibleTrigger>
                     )}
                   </Collapsible>
                 </div>

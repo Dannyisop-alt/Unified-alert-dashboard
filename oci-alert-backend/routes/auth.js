@@ -66,7 +66,11 @@ router.post('/login', async (req, res) => {
       }
 
       console.log('✅ [LOGIN] Password comparison successful');
-      const accessArray = row.USER_ALERTS_ACCESS.split(',').map((s) => s.trim()).filter(Boolean);
+//      const accessArray = row.USER_ALERTS_ACCESS.split(',').map((s) => s.trim()).filter(Boolean);
+      const accessArray = row.USER_ALERTS_ACCESS
+  ? row.USER_ALERTS_ACCESS.split(',').map((s) => s.trim()).filter(Boolean)
+  : [];
+
       console.log('🎫 [LOGIN] User access:', accessArray);
       
       const token = jwt.sign(
@@ -125,7 +129,7 @@ router.post('/admin/create-user', authenticateJWT, requireAdmin, async (req, res
     const saltRounds = 10;
     const hashed = await bcrypt.hash(password, saltRounds);
 
-    const insertSql = `INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE, CREATED_AT) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`;
+    const insertSql = `INSERT INTO ALERTS_USERPROFILE (USER_ID, USER_PSWD, USER_ALERTS_ACCESS, USER_ROLE) VALUES (?, ?, ?, ?)`;
     db.run(insertSql, [email, hashed, access, 'user'], function (err) {
       if (err) {
         if (err.message && err.message.includes('UNIQUE constraint failed')) {

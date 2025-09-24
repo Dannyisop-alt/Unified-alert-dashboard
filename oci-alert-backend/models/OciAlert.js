@@ -32,6 +32,11 @@ const ociAlertSchema = new mongoose.Schema({
   threshold: Number,
   currentValue: Number,
   unit: String,
+  resourceDisplayName: String,
+  metricValues: {
+    type: Map,
+    of: String
+  },
   timestamp: {
     type: Date,
     // The default value has been removed.

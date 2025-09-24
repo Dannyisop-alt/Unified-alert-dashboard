@@ -1,168 +1,131 @@
-// import type { GraylogAlert } from '@/types/alerts';
+import type { OCIAlert } from '@/types/alerts';
 
-// const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+class SSEService {
+  private eventSource: EventSource | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
+  private onAlertCallback: ((alert: OCIAlert) => void) | null = null;
+  private onConnectionChangeCallback: ((connected: boolean) => void) | null = null;
 
-// class SSEService {
-//   private eventSource: EventSource | null = null;
-//   private isConnected = false;
-//   private reconnectAttempts = 0;
-//   private maxReconnectAttempts = 5;
-//   private reconnectDelay = 1000; // Start with 1 second
+  constructor() {
+    this.connect = this.connect.bind(this);
+    this.disconnect = this.disconnect.bind(this);
+    this.handleMessage = this.handleMessage.bind(this);
+    this.handleError = this.handleError.bind(this);
+  }
 
-//   // Event handlers
-//   private onAlertHandlers: ((alert: GraylogAlert) => void)[] = [];
-//   private onAlertsHandlers: ((alerts: GraylogAlert[]) => void)[] = [];
-//   private onAlertUpdateHandlers: ((alert: GraylogAlert) => void)[] = [];
-//   private onConnectionHandlers: ((connected: boolean) => void)[] = [];
+  connect(apiBaseUrl: string) {
+    if (this.eventSource) {
+      this.disconnect();
+    }
 
-//   connect() {
-//     if (this.eventSource && this.isConnected) {
-//       console.log('🔌 SSE already connected');
-//       return;
-//     }
+    const streamUrl = `${apiBaseUrl}/webhook/stream`;
+    console.log('🔌 [SSE] Connecting to:', streamUrl);
 
-//     console.log('🔌 Connecting to SSE...');
-//     this.eventSource = new EventSource(`${API_BASE_URL}/graylog-sse`);
+    try {
+      this.eventSource = new EventSource(streamUrl);
 
-//     this.eventSource.onopen = () => {
-//       console.log('✅ SSE connected');
-//       this.isConnected = true;
-//       this.reconnectAttempts = 0;
-//       this.reconnectDelay = 1000;
-//       this.notifyConnectionHandlers(true);
-//     };
+      this.eventSource.onopen = () => {
+        console.log('✅ [SSE] Connected to alert stream');
+        this.reconnectAttempts = 0;
+        this.onConnectionChangeCallback?.(true);
+      };
 
-//     this.eventSource.onerror = (error) => {
-//       console.error('❌ SSE connection error:', error);
-//       this.isConnected = false;
-//       this.notifyConnectionHandlers(false);
-//       this.handleReconnect();
-//     };
+      this.eventSource.onmessage = this.handleMessage;
 
-//     this.eventSource.onmessage = (event) => {
-//       try {
-//         const data = JSON.parse(event.data);
-        
-//         switch (data.type) {
-//           case 'alert':
-//             console.log('📨 Received new Graylog alert via SSE:', data.data);
-//             this.notifyAlertHandlers(data.data);
-//             break;
-//           case 'alerts':
-//             console.log('📨 Received Graylog alerts batch via SSE:', data.data.length);
-//             this.notifyAlertsHandlers(data.data);
-//             break;
-//           case 'alert-updated':
-//             console.log('🔄 Received Graylog alert update via SSE:', data.data);
-//             this.notifyAlertUpdateHandlers(data.data);
-//             break;
-//           case 'ping':
-//             // Keep-alive ping, no action needed
-//             break;
-//           default:
-//             console.log('📨 Unknown SSE message type:', data.type);
-//         }
-//       } catch (error) {
-//         console.error('❌ Error parsing SSE message:', error);
-//       }
-//     };
-//   }
+      this.eventSource.onerror = (event) => {
+        console.error('❌ [SSE] Connection error:', event);
+        this.onConnectionChangeCallback?.(false);
+        this.handleError(event);
+      };
 
-//   private handleReconnect() {
-//     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-//       console.log('❌ Max reconnection attempts reached');
-//       return;
-//     }
+      // Handle different event types
+      this.eventSource.addEventListener('alert', this.handleMessage);
+      this.eventSource.addEventListener('connected', this.handleMessage);
+      this.eventSource.addEventListener('heartbeat', this.handleMessage);
+    } catch (error) {
+      console.error('❌ [SSE] Failed to create EventSource:', error);
+      this.onConnectionChangeCallback?.(false);
+    }
+  }
 
-//     this.reconnectAttempts++;
-//     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    
-//     console.log(`🔄 Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    
-//     setTimeout(() => {
-//       if (!this.isConnected) {
-//         this.connect();
-//       }
-//     }, delay);
-//   }
+  private handleMessage(event: MessageEvent) {
+    try {
+      const data = JSON.parse(event.data);
+      
+      switch (data.type) {
+        case 'alert':
+          console.log('🔔 [SSE] Received alert:', data.data);
+          this.onAlertCallback?.(data.data);
+          break;
+        case 'connected':
+          console.log('✅ [SSE] Stream connected:', data.message);
+          break;
+        case 'heartbeat':
+          console.log('💓 [SSE] Heartbeat received');
+          break;
+        default:
+          console.log('📨 [SSE] Unknown message type:', data.type);
+      }
+    } catch (error) {
+      console.error('❌ [SSE] Error parsing message:', error);
+    }
+  }
 
-//   disconnect() {
-//     if (this.eventSource) {
-//       console.log('🔌 Disconnecting SSE...');
-//       this.eventSource.close();
-//       this.eventSource = null;
-//       this.isConnected = false;
-//       this.notifyConnectionHandlers(false);
-//     }
-//   }
+  private handleError(event: Event) {
+    console.error('❌ [SSE] Connection error:', event);
+    this.onConnectionChangeCallback?.(false);
 
-//   // Event subscription methods
-//   onAlert(handler: (alert: GraylogAlert) => void) {
-//     this.onAlertHandlers.push(handler);
-//     return () => {
-//       const index = this.onAlertHandlers.indexOf(handler);
-//       if (index > -1) {
-//         this.onAlertHandlers.splice(index, 1);
-//       }
-//     };
-//   }
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+      
+      console.log(`🔄 [SSE] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      
+      setTimeout(() => {
+        if (this.eventSource?.readyState === EventSource.CLOSED) {
+          this.connect(this.getCurrentUrl());
+        }
+      }, delay);
+    } else {
+      console.error('❌ [SSE] Max reconnection attempts reached');
+    }
+  }
 
-//   onAlerts(handler: (alerts: GraylogAlert[]) => void) {
-//     this.onAlertsHandlers.push(handler);
-//     return () => {
-//       const index = this.onAlertsHandlers.indexOf(handler);
-//       if (index > -1) {
-//         this.onAlertsHandlers.splice(index, 1);
-//       }
-//     };
-//   }
+  private getCurrentUrl(): string {
+    // Extract base URL from current connection
+    if (this.eventSource?.url) {
+      return this.eventSource.url.replace('/webhook/stream', '');
+    }
+    return import.meta.env.VITE_API_URL || 'https://transitdemo.qryde.net';
+  }
 
-//   onAlertUpdate(handler: (alert: GraylogAlert) => void) {
-//     this.onAlertUpdateHandlers.push(handler);
-//     return () => {
-//       const index = this.onAlertUpdateHandlers.indexOf(handler);
-//       if (index > -1) {
-//         this.onAlertUpdateHandlers.splice(index, 1);
-//       }
-//     };
-//   }
+  disconnect() {
+    if (this.eventSource) {
+      console.log('🔌 [SSE] Disconnecting from alert stream');
+      this.eventSource.close();
+      this.eventSource = null;
+      this.onConnectionChangeCallback?.(false);
+    }
+  }
 
-//   onConnection(handler: (connected: boolean) => void) {
-//     this.onConnectionHandlers.push(handler);
-//     return () => {
-//       const index = this.onConnectionHandlers.indexOf(handler);
-//       if (index > -1) {
-//         this.onConnectionHandlers.splice(index, 1);
-//       }
-//     };
-//   }
+  onAlert(callback: (alert: OCIAlert) => void) {
+    this.onAlertCallback = callback;
+  }
 
-//   // Notify methods
-//   private notifyAlertHandlers(alert: GraylogAlert) {
-//     this.onAlertHandlers.forEach(handler => handler(alert));
-//   }
+  onConnectionChange(callback: (connected: boolean) => void) {
+    this.onConnectionChangeCallback = callback;
+  }
 
-//   private notifyAlertsHandlers(alerts: GraylogAlert[]) {
-//     this.onAlertsHandlers.forEach(handler => handler(alerts));
-//   }
+  isConnected(): boolean {
+    return this.eventSource?.readyState === EventSource.OPEN;
+  }
 
-//   private notifyAlertUpdateHandlers(alert: GraylogAlert) {
-//     this.onAlertUpdateHandlers.forEach(handler => handler(alert));
-//   }
+  getConnectionState(): number {
+    return this.eventSource?.readyState ?? EventSource.CLOSED;
+  }
+}
 
-//   private notifyConnectionHandlers(connected: boolean) {
-//     this.onConnectionHandlers.forEach(handler => handler(connected));
-//   }
-
-//   // Getters
-//   get connected() {
-//     return this.isConnected;
-//   }
-
-//   get readyState() {
-//     return this.eventSource?.readyState;
-//   }
-// }
-
-// // Export singleton instance
-// export const sseService = new SSEService();
+// Export singleton instance
+export const sseService = new SSEService();

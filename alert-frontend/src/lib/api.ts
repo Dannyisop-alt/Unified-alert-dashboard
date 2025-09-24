@@ -44,7 +44,7 @@ export const api = {
     }, 2, 2000); // 2 retries with 2 second initial delay
   },
 
-  // Fetch Infrastructure/OCI alerts
+  // Fetch OCI alerts from memory storage
   async getOCIAlerts(params?: { 
     severity?: string; 
     vm?: string; 
@@ -54,10 +54,10 @@ export const api = {
     limit?: number;
   }): Promise<OCIAlert[]> {
     return retryRequest(async () => {
-      console.log('\n🏗️ [API] Fetching OCI alerts...');
+      console.log('\n🏗️ [API] Fetching OCI alerts from memory storage...');
       console.log(`📋 [API] Parameters: ${JSON.stringify(params)}`);
       
-      const url = new URL(`${API_BASE_URL}/oci-alerts`);
+      const url = new URL(`${API_BASE_URL}/webhook/alerts`);
       if (params?.severity) url.searchParams.set('severity', params.severity);
       if (params?.vm) url.searchParams.set('vm', params.vm);
       if (params?.tenant) url.searchParams.set('tenant', params.tenant);
@@ -67,20 +67,15 @@ export const api = {
       
       console.log(`🌐 [API] URL: ${url.toString()}`);
       
-      const token = getToken();
-      console.log(`🎫 [API] Token: ${token ? token.substring(0, 50) + '...' : 'MISSING'}`);
-      
       const response = await fetch(url.toString(), {
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         // Add timeout to prevent hanging requests
-        signal: AbortSignal.timeout(60000) // 60 second timeout for OCI
+        signal: AbortSignal.timeout(30000) // 30 second timeout for memory data
       });
       
       console.log(`📡 [API] Response status: ${response.status}`);
-      console.log(`📡 [API] Response headers:`, Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -91,7 +86,7 @@ export const api = {
       const data = await response.json();
       console.log(`✅ [API] OCI alerts fetched: ${data.length} alerts`);
       return data;
-    }, 2, 3000); // 2 retries with 3 second initial delay
+    }, 2, 2000); // 2 retries with 2 second initial delay
   },
 
   // Mark alert as read
@@ -115,7 +110,7 @@ export const api = {
     return response.json();
   },
 
-  // Get filter options for OCI alerts
+  // Get filter options for OCI alerts from memory storage
   async getOCIFilterOptions(): Promise<{
     vms: string[];
     tenants: string[];
@@ -123,7 +118,7 @@ export const api = {
     alertTypes: string[];
     severities: string[];
   }> {
-    const response = await fetch(`${API_BASE_URL}/oci-alerts/filters`);
+    const response = await fetch(`${API_BASE_URL}/webhook/filters`);
     if (!response.ok) throw new Error('Failed to fetch filter options');
     return response.json();
   },

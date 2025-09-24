@@ -37,6 +37,38 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
     // State cleared - triggering fresh fetch
   }, [selectedCategory, filters.source?.join(',')]); // React to source array changes
 
+  // Polling for OCI alerts from memory storage
+  useEffect(() => {
+    const needsOCI = filters.source?.includes('Infrastructure Alerts');
+    
+    if (needsOCI) {
+      console.log('🔄 [POLLING] Setting up OCI alert polling...');
+      
+      // Fetch alerts immediately
+      const fetchOCIAlerts = async () => {
+        try {
+          const alerts = await api.getOCIAlerts({ limit: 100 });
+          setOCIAlerts(alerts);
+        } catch (error) {
+          console.error('❌ [POLLING] Error fetching OCI alerts:', error);
+        }
+      };
+      
+      fetchOCIAlerts();
+      
+      // Set up polling every 5 seconds
+      const interval = setInterval(fetchOCIAlerts, 5000);
+      
+      return () => {
+        console.log('🔄 [POLLING] Clearing OCI alert polling');
+        clearInterval(interval);
+      };
+    } else {
+      // Clear OCI alerts if not needed
+      setOCIAlerts([]);
+    }
+  }, [filters.source?.join(',')]);
+
 
   // ✅ SEPARATE effect for fetching (runs after state is cleared)
   useEffect(() => {
@@ -67,14 +99,9 @@ export const MonitoringDashboard = ({ selectedCategory, filters, onFiltersChange
         }
         
         if (needsOCI) {
-          console.log('🏗️ [DASHBOARD] Fetching Infrastructure alerts...');
-          try {
-            const ociData = await api.getOCIAlerts({ limit: 100 });
-            console.log(`🏗️ [DASHBOARD] Infrastructure loaded: ${ociData.length} alerts`);
-            setOCIAlerts(ociData);
-          } catch (err) {
-            console.error('🏗️ [FETCH] Infrastructure failed:', err);
-          }
+          console.log('🏗️ [DASHBOARD] Infrastructure alerts will be fetched via polling...');
+          // OCI alerts are now fetched via polling in the separate effect above
+          // No need to fetch them here
         }
         
         if (needsHeartbeat) {
