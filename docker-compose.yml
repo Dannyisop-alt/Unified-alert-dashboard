@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   backend:
     build:
@@ -12,8 +14,6 @@ services:
       - "${OCI_CONFIG_PATH:-C:/Users/Vaibhav Malhotra/.oci}:/root/.oci:ro"
       # Persistent database storage - data survives container restarts
       - "oci-db-data:/app/data"
-      # Log files storage - persistent across container restarts
-      - "oci-logs-data:/app/logs"
     environment:
       # PRODUCTION: MUST CHANGE these credentials in .env file
       - ADMIN_USERNAME=${ADMIN_USERNAME:-himalhotra751@gmail.com}
@@ -22,7 +22,6 @@ services:
       - JWT_SECRET=${JWT_SECRET:-aB7@xYz!pQ3#tUvW2&nM5*oJ8^rT1}
       - PORT=${BACKEND_PORT:-5000}
       - NODE_ENV=${NODE_ENV:-development}
-      - LOGS_DIR=${LOGS_DIR:-/app/logs}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -37,9 +36,6 @@ services:
     build:
       context: ./alert-frontend
       dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${VITE_API_URL}
-        - VITE_WS_URL=${VITE_WS_URL}
     container_name: oci-alert-dashboard-frontend
     ports:
       # PRODUCTION: Change FRONTEND_PORT in .env file (default: 1013)
@@ -48,11 +44,11 @@ services:
       # PRODUCTION: Change VITE_API_URL in .env file to your domain
       - VITE_API_URL=${VITE_API_URL}
       # WebSocket URL for heartbeat monitoring (usually no change needed)
-      - VITE_WS_URL=${VITE_WS_URL}
+      - VITE_WS_URL=${VITE_WS_URL:-wss://hbc.hbssweb.com:4950}
       - NODE_ENV=${NODE_ENV:-development}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:80"]
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -65,8 +61,6 @@ services:
 
 volumes:
   oci-db-data:
-    driver: local
-  oci-logs-data:
     driver: local
 
 networks:

@@ -79,12 +79,9 @@ export const AlertCard = ({ alert }: AlertCardProps) => {
   // Safety check to ensure description is always a string
   const safeDescription = alert.description || 'No description available';
   
-  // For Infrastructure Alerts, show expand button if there are additional details
+  // For Infrastructure Alerts, never show expand button
   // For other alerts, show expand button if description is long
-  const hasAdditionalDetails = alert.source === 'Infrastructure Alerts' && (
-    alert.query || alert.shape || alert.availabilityDomain || alert.faultDomain
-  );
-  const shouldShowExpand = hasAdditionalDetails || safeDescription.length > 100;
+  const shouldShowExpand = alert.source !== 'Infrastructure Alerts' && safeDescription.length > 100;
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -145,19 +142,26 @@ export const AlertCard = ({ alert }: AlertCardProps) => {
                 )}
                 
                 {/* Show metrics right under the title for Infrastructure Alerts */}
-                {alert.source === 'Infrastructure Alerts' && alert.metricValues && Object.keys(alert.metricValues).length > 0 && (
+                {alert.source === 'Infrastructure Alerts' && alert.metricValues && (
                   <div className="mb-2">
                     <div className="space-y-1">
-                      {Object.entries(alert.metricValues).map(([key, value], index) => {
-                        // Create a safe key for React
-                        const safeKey = `metric-${index}-${String(key).replace(/[^a-zA-Z0-9]/g, '')}`;
-                        return (
-                          <div key={safeKey} className="flex items-center gap-2 text-sm">
-                            <span className="text-gray-600 font-medium">{String(key)}:</span>
-                            <span className="font-mono text-gray-800 font-semibold">{String(value)}</span>
-                          </div>
-                        );
-                      })}
+                      {/* Check if metricValues is an array with at least one element */}
+                      {Array.isArray(alert.metricValues) && alert.metricValues.length > 0 ? (
+                        // If it's an array, map over it and then get the entries of the object inside
+                        alert.metricValues.map((metricObject, arrayIndex) => (
+                          Object.entries(metricObject).map(([key, value], entryIndex) => (
+                            <div key={`metric-${arrayIndex}-${entryIndex}`} className="flex items-center gap-2 text-sm">
+                              <span className="text-gray-600 font-medium">{String(key)}:</span>
+                              <span className="font-mono text-gray-800 font-semibold">{String(value)}</span>
+                            </div>
+                          ))
+                        ))
+                      ) : (
+                        // Fallback for non-array or empty metricValues
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-gray-600">No metric values available</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -181,51 +185,12 @@ export const AlertCard = ({ alert }: AlertCardProps) => {
                           </div>
                         )}
                         
-                        {/* Show More button right after Query */}
-                        {shouldShowExpand && (
-                          <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="sm" className="p-0 h-auto text-xs hover:text-blue-800 text-blue-600">
-                              <span className="flex items-center gap-1">
-                                {isExpanded ? (
-                                  <>
-                                    Show Less
-                                    <ChevronUp className="h-3 w-3" />
-                                  </>
-                                ) : (
-                                  <>
-                                    Show More
-                                    <ChevronDown className="h-3 w-3" />
-                                  </>
-                                )}
-                              </span>
-                            </Button>
-                          </CollapsibleTrigger>
-                        )}
+                        {/* Show More button removed for Infrastructure Alerts */}
                         
-                        {/* Show additional OCI fields when expanded */}
+                        {/* Show additional OCI fields when expanded - REMOVED unwanted fields */}
                         {isExpanded && (
                           <div className="mt-2 text-xs space-y-1 text-gray-500">
-                            {alert.status && (
-                              <div>
-                                <span className="font-medium">Status:</span> 
-                                <span className="ml-1">{alert.status}</span>
-                              </div>
-                            )}
-                            {alert.shape && (
-                              <div>
-                                <span className="font-medium">Shape:</span> {alert.shape}
-                              </div>
-                            )}
-                            {alert.availabilityDomain && (
-                              <div>
-                                <span className="font-medium">Availability Domain:</span> {alert.availabilityDomain}
-                              </div>
-                            )}
-                            {alert.faultDomain && (
-                              <div>
-                                <span className="font-medium">Fault Domain:</span> {alert.faultDomain}
-                              </div>
-                            )}
+                            {/* No additional fields to show - removed status, shape, availability domain, fault domain */}
                           </div>
                         )}
                       </div>

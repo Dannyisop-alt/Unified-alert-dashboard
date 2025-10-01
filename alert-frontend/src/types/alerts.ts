@@ -11,6 +11,62 @@ export interface GraylogAlert {
   read?: boolean;
 }
 
+// New OCI Webhook Structure Types
+export interface OCIDimension {
+  hostName?: string;
+  deploymentType?: string;
+  resourceId?: string;
+  resourceName?: string;
+  instanceNumber?: string;
+  instanceName?: string;
+  resourceName_database?: string;
+  resourceId_database?: string;
+  instancePoolId?: string;
+  resourceDisplayName?: string;
+  faultDomain?: string;
+  availabilityDomain?: string;
+  imageId?: string;
+  shape?: string;
+  dedicatedVmHostId?: string;
+  region?: string;
+}
+
+export interface OCIMetricValue {
+  [key: string]: string;
+}
+
+export interface OCIAlarmMetadata {
+  id: string;
+  status: string;
+  severity: string;
+  namespace: string;
+  query: string;
+  totalMetricsFiring: number;
+  dimensions: OCIDimension[];
+  alarmUrl: string;
+  alarmSummary: string;
+  metricValues: OCIMetricValue[];
+}
+
+export interface OCIRawPayload {
+  dedupeKey: string;
+  title: string;
+  type: string;
+  severity: string;
+  timestampEpochMillis: number;
+  timestamp: string;
+  alarmMetaData: OCIAlarmMetadata[];
+  notificationType: string;
+  version: number;
+}
+
+export interface OCIRawWebhook {
+  timestamp: string;
+  alertType: string;
+  source: string;
+  rawPayload: OCIRawPayload;
+}
+
 export interface OCIAlert {
   _id?: string;
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info' | 'error' | 'warning';
@@ -45,6 +101,8 @@ export interface OCIAlert {
   // New fields for status and timestamp display
   status?: string;
   timestampEpochMillis?: number;
+  // Raw webhook data for new OCI format
+  rawPayload?: OCIRawWebhook;
 }
 
 export interface AlertFilters {
@@ -97,4 +155,11 @@ export interface ProcessedAlert {
   // New fields for status and timestamp display
   status?: string;
   timestampEpochMillis?: number;
+  // New OCI webhook specific fields
+  alarmOCID?: string;
+  namespace?: string;
+  totalMetricsFiring?: number;
+  alarmUrl?: string;
+  notificationType?: string;
+  version?: number;
 }

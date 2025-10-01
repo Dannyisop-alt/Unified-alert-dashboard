@@ -66,8 +66,3 @@ export function isAdmin(): boolean {
   console.log(`👑 [AUTH] Checking admin status: ${isAdminUser ? 'ADMIN' : 'USER'} (role: ${role})`);
   return isAdminUser;
 }
-
-
-
-
-

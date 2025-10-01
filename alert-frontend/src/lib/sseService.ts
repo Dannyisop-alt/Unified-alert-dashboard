@@ -98,7 +98,7 @@ class SSEService {
     if (this.eventSource?.url) {
       return this.eventSource.url.replace('/webhook/stream', '');
     }
-    return import.meta.env.VITE_API_URL || 'https://transitdemo.qryde.net';
+    return import.meta.env.VITE_API_URL || '';
   }
 
   disconnect() {

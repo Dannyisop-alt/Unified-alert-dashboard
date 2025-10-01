@@ -1,6 +1,145 @@
 import type { GraylogAlert, OCIAlert, AlertFilters, ProcessedAlert } from '@/types/alerts';
 import type { HeartbeatAlert } from '@/lib/heartbeatService';
 
+// Helper function to parse alarm summary into readable English
+const parseAlarmSummary = (alarmSummary: string, query: string): string => {
+  if (!alarmSummary) return 'No alarm details available';
+  
+  // Extract key information from alarm summary
+  const alarmName = alarmSummary.match(/Alarm "([^"]+)"/)?.[1] || 'Unknown Alarm';
+  const state = alarmSummary.match(/is in a "([^"]+)"/)?.[1] || 'Unknown State';
+  const triggerRule = alarmSummary.match(/trigger rule: "([^"]+)"/)?.[1] || query || 'No rule specified';
+  const delay = alarmSummary.match(/trigger delay of (\d+ minutes?)/)?.[1] || 'No delay specified';
+  
+  // Convert to readable English
+  let readableSummary = `${alarmName} is currently ${state.toLowerCase()}`;
+  
+  if (triggerRule && triggerRule !== 'No rule specified') {
+    readableSummary += ` because the monitoring rule "${triggerRule}" has been triggered`;
+  }
+  
+  if (delay && delay !== 'No delay specified') {
+    readableSummary += ` since last ${delay}`;
+  }
+  
+  return readableSummary;
+};
+
+// Helper function to parse query into readable English
+const parseQuery = (query: string): string => {
+  if (!query) return 'No query specified';
+  
+  // Parse common OCI monitoring queries
+  const queryPatterns = [
+    // CPU utilization patterns
+    {
+      pattern: /CpuUtilization\[(\d+)m\]\.percentile\(\.(\d+)\)\s*([><=]+)\s*(\d+)/,
+      readable: (match: RegExpMatchArray) => {
+        const timeWindow = match[1];
+        const percentile = match[2];
+        const operator = match[3];
+        const threshold = match[4];
+        const opText = operator === '>' ? 'exceeds' : operator === '<' ? 'falls below' : 'equals';
+        return `CPU usage (${percentile}th percentile over ${timeWindow} minutes) ${opText} ${threshold}%`;
+      }
+    },
+    // Memory utilization patterns
+    {
+      pattern: /MemoryUtilization\[(\d+)m\]\.percentile\(\.(\d+)\)\s*([><=]+)\s*(\d+)/,
+      readable: (match: RegExpMatchArray) => {
+        const timeWindow = match[1];
+        const percentile = match[2];
+        const operator = match[3];
+        const threshold = match[4];
+        const opText = operator === '>' ? 'exceeds' : operator === '<' ? 'falls below' : 'equals';
+        return `Memory usage (${percentile}th percentile over ${timeWindow} minutes) ${opText} ${threshold}%`;
+      }
+    },
+    // Disk utilization patterns
+    {
+      pattern: /DiskUtilization\[(\d+)m\]\.percentile\(\.(\d+)\)\s*([><=]+)\s*(\d+)/,
+      readable: (match: RegExpMatchArray) => {
+        const timeWindow = match[1];
+        const percentile = match[2];
+        const operator = match[3];
+        const threshold = match[4];
+        const opText = operator === '>' ? 'exceeds' : operator === '<' ? 'falls below' : 'equals';
+        return `Disk usage (${percentile}th percentile over ${timeWindow} minutes) ${opText} ${threshold}%`;
+      }
+    },
+    // Network patterns
+    {
+      pattern: /NetworkUtilization\[(\d+)m\]\.percentile\(\.(\d+)\)\s*([><=]+)\s*(\d+)/,
+      readable: (match: RegExpMatchArray) => {
+        const timeWindow = match[1];
+        const percentile = match[2];
+        const operator = match[3];
+        const threshold = match[4];
+        const opText = operator === '>' ? 'exceeds' : operator === '<' ? 'falls below' : 'equals';
+        return `Network usage (${percentile}th percentile over ${timeWindow} minutes) ${opText} ${threshold}%`;
+      }
+    }
+  ];
+  
+  // Try to match known patterns
+  for (const { pattern, readable } of queryPatterns) {
+    const match = query.match(pattern);
+    if (match) {
+      return readable(match);
+    }
+  }
+  
+  // If no pattern matches, return a simplified version
+  return query.replace(/\[(\d+)m\]/g, ' (over $1 minutes)')
+              .replace(/\.percentile\(\.(\d+)\)/g, ' ($1th percentile)')
+              .replace(/>/g, ' exceeds ')
+              .replace(/</g, ' falls below ')
+              .replace(/=/g, ' equals ');
+};
+
+// Helper function to safely extract nested rawPayload
+const extractNestedPayload = (alert: OCIAlert): any => {
+  // Handle double-nested rawPayload structure
+  if (alert.rawPayload?.rawPayload) {
+    return alert.rawPayload.rawPayload;
+  }
+  // Handle single-nested structure
+  if (alert.rawPayload) {
+    return alert.rawPayload;
+  }
+  // Fallback to the alert itself
+  return alert;
+};
+
+// Helper function to safely stringify metric values
+const safeStringifyMetricValues = (metricValues: any): string => {
+  if (!metricValues) return '';
+  
+  try {
+    if (typeof metricValues === 'object') {
+      if (Array.isArray(metricValues) && metricValues.length > 0) {
+        // Handle array of metric values
+        const firstMetric = metricValues[0];
+        if (typeof firstMetric === 'object') {
+          return Object.entries(firstMetric)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(', ');
+        }
+        return String(firstMetric);
+      } else if (!Array.isArray(metricValues)) {
+        // Handle object metric values
+        return Object.entries(metricValues)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ');
+      }
+    }
+    return String(metricValues);
+  } catch (error) {
+    console.warn('Error stringifying metric values:', error);
+    return 'Unable to display metric values';
+  }
+};
+
 export const processAlerts = (
   graylogAlerts: GraylogAlert[],
   ociAlerts: OCIAlert[],
@@ -151,93 +290,163 @@ export const processAlerts = (
 
   // Process OCI alerts ONLY for Infrastructure Alerts  
   if (shouldProcessOCI && ociAlerts.length > 0) {
-    // Processing OCI alerts
+    // Process OCI alerts with new webhook format
     ociAlerts.forEach((alert, index) => {
       const source: 'Infrastructure Alerts' = 'Infrastructure Alerts';
-      const severity = mapSeverity(alert.severity, source);
-
-      // Use title from new webhook format if available, otherwise fall back to message
-      let alertTitle = alert.title || alert.message || 'No title available';
       
-      // Clean up alert title - remove OCI prefixes
-      alertTitle = alertTitle.replace(/^(OCI_|ALARM_|ERROR_)/i, '');
+      // Extract the nested payload safely
+      const rawPayload = extractNestedPayload(alert);
       
-      // For new webhook format, don't add metric info to title as it will be shown separately
-      // For old format, show metric information in the title
-      if (!alert.title && alert.metricValues && Object.keys(alert.metricValues).length > 0) {
-        try {
-          const metricInfo = Object.entries(alert.metricValues)
-            .map(([key, value]) => `${key}: ${value}`)
-            .join(', ');
-          alertTitle = `${alertTitle} - ${metricInfo}`;
-        } catch (error) {
-          console.warn('Error processing metric values:', error);
-          // Fallback to just showing the alert title
+      // Check if this is the new OCI webhook format
+      if (rawPayload && rawPayload.alarmMetaData && rawPayload.alarmMetaData.length > 0) {
+        // New OCI webhook format processing
+        const alarmMeta = rawPayload.alarmMetaData[0]; // Use first alarm metadata
+        const dimensions = alarmMeta.dimensions && alarmMeta.dimensions[0] ? alarmMeta.dimensions[0] : {};
+        
+        // 1. Title - Extract from rawPayload.title (bold at top)
+        const alertTitle = rawPayload.title || alarmMeta.title || 'No title available';
+        
+        // 2. Severity - Extract from rawPayload.severity
+        const severity = mapSeverity(rawPayload.severity || alarmMeta.severity, source);
+        
+        // 3. Create readable description from alarm summary and query
+        const alarmSummary = alarmMeta.alarmSummary || '';
+        const query = alarmMeta.query || '';
+        const readableAlarmSummary = parseAlarmSummary(alarmSummary, query);
+        const readableQuery = parseQuery(query);
+        
+        // 4. Add metric values to description if available
+        let description = readableAlarmSummary;
+        if (alarmMeta.metricValues && alarmMeta.metricValues.length > 0) {
+          const metricInfo = safeStringifyMetricValues(alarmMeta.metricValues);
+          if (metricInfo) {
+            description += `. Current values: ${metricInfo}`;
+          }
         }
-      } else if (!alert.title && alert.query) {
-        // Extract metric from query if no metricValues available
-        const queryMatch = alert.query.match(/^([A-Za-z]+)\[/);
-        if (queryMatch) {
-          alertTitle = `${alertTitle} - ${queryMatch[1]}`;
+        
+        // 5. Resource Name - Extract from dimensions
+        const resourceName = dimensions.resourceDisplayName || dimensions.resourceName || dimensions.hostName || 'Unknown Resource';
+        
+        // 6. Region - Extract from dimensions
+        const region = dimensions.region || 'Unknown Region';
+        
+        // 7. Timestamp - Use rawPayload.timestamp (first timestamp)
+        const timestamp = rawPayload.timestamp || alert.timestamp;
+        
+        // 8. Determine if database or server based on namespace or resource name
+        const isDatabase = alarmMeta.namespace?.includes('database') || 
+                          resourceName.toLowerCase().includes('db') || 
+                          isDatabaseAlert(alert);
+        const resourceType: 'Database' | 'Server' = isDatabase ? 'Database' : 'Server';
+        
+        const processedAlert = {
+          id: alert._id || `oci-${rawPayload.dedupeKey || Date.now()}-${index}`,
+          source,
+          severity,
+          title: alertTitle,
+          description: description,
+          timestamp,
+          site: resourceName,
+          category: isDatabase ? 'database' as const : 'infrastructure' as const,
+          region,
+          resourceType,
+          resourceDisplayName: resourceName,
+          metricValues: alarmMeta.metricValues || [],
+          query: readableQuery,
+          alarmSummary: readableAlarmSummary,
+          alarmOCID: alarmMeta.id,
+          namespace: alarmMeta.namespace,
+          totalMetricsFiring: alarmMeta.totalMetricsFiring,
+          alarmUrl: alarmMeta.alarmUrl,
+          status: alarmMeta.status,
+          shape: dimensions.shape,
+          availabilityDomain: dimensions.availabilityDomain,
+          faultDomain: dimensions.faultDomain,
+          instancePoolId: dimensions.instancePoolId,
+          notificationType: rawPayload.notificationType,
+          version: rawPayload.version,
+          timestampEpochMillis: rawPayload.timestampEpochMillis
+        };
+        
+        processedAlerts.push(processedAlert);
+      } else {
+        // Legacy OCI alert format processing (fallback)
+        const severity = mapSeverity(alert.severity, source);
+        
+        // Use title from new webhook format if available, otherwise fall back to message
+        let alertTitle = alert.title || alert.message || 'No title available';
+        
+        // Clean up alert title - remove OCI prefixes
+        alertTitle = alertTitle.replace(/^(OCI_|ALARM_|ERROR_)/i, '');
+        
+        // For new webhook format, don't add metric info to title as it will be shown separately
+        // For old format, show metric information in the title
+        if (!alert.title && alert.metricValues && Object.keys(alert.metricValues).length > 0) {
+          const metricInfo = safeStringifyMetricValues(alert.metricValues);
+          if (metricInfo) {
+            alertTitle = `${alertTitle} - ${metricInfo}`;
+          }
+        } else if (!alert.title && alert.query) {
+          // Extract metric from query if no metricValues available
+          const queryMatch = alert.query.match(/^([A-Za-z]+)\[/);
+          if (queryMatch) {
+            alertTitle = `${alertTitle} - ${queryMatch[1]}`;
+          }
         }
-      }
-      
-      if (alertTitle.includes('Processing Error') || alertTitle.includes('OCI_ALARM_ERROR')) {
-        if (alert.metricName && alert.metricName !== 'Unknown') {
-          alertTitle = alert.metricName;
-        } else if (alert.alertType && alert.alertType !== 'OCI_ALARM') {
-          alertTitle = alert.alertType;
-        } else {
-          alertTitle = `Alert on ${alert.vm}`;
+        
+        if (alertTitle.includes('Processing Error') || alertTitle.includes('OCI_ALARM_ERROR')) {
+          if (alert.metricName && alert.metricName !== 'Unknown') {
+            alertTitle = alert.metricName;
+          } else if (alert.alertType && alert.alertType !== 'OCI_ALARM') {
+            alertTitle = alert.alertType;
+          } else {
+            alertTitle = `Alert on ${alert.vm}`;
+          }
         }
-      }
-      
-      if (alertTitle.length > 100) {
-        alertTitle = alertTitle.substring(0, 97) + '...';
-      }
+        
+        if (alertTitle.length > 100) {
+          alertTitle = alertTitle.substring(0, 97) + '...';
+        }
 
-      const isDatabase = isDatabaseAlert(alert);
-      const resourceType: 'Database' | 'Server' = isDatabase ? 'Database' : 'Server';
-      const category: 'infrastructure' | 'database' = isDatabase ? 'database' : 'infrastructure';
+        const isDatabase = isDatabaseAlert(alert);
+        const resourceType: 'Database' | 'Server' = isDatabase ? 'Database' : 'Server';
+        const category: 'infrastructure' | 'database' = isDatabase ? 'database' : 'infrastructure';
 
-      // Debug logging for new fields
-      if (alert.resourceDisplayName && alert.resourceDisplayName !== 'N/A') {
-        console.log(`🔍 [FRONTEND DEBUG] Found resourceDisplayName: ${alert.resourceDisplayName} for alert ${alert._id || alert.timestamp}`);
+        // Parse alarm summary and query into readable English
+        const readableAlarmSummary = parseAlarmSummary(alert.alarmSummary || '', alert.query || '');
+        const readableQuery = parseQuery(alert.query || '');
+
+        const processedAlert = {
+          id: alert._id || `oci-${alert.timestamp}-${index}`, // Ensure unique IDs
+          source, // ✅ MUST be 'Infrastructure Alerts'
+          severity,
+          title: alertTitle,
+          description: readableAlarmSummary, // Use parsed alarm summary
+          timestamp: alert.timestamp,
+          site: alert.vm,
+          category: category,
+          region: alert.region,
+          compartment: alert.compartment,
+          metricName: alert.metricName,
+          tenant: alert.tenant,
+          resourceType: resourceType,
+          resourceDisplayName: alert.resourceDisplayName,
+          metricValues: alert.metricValues,
+          query: readableQuery, // Use parsed query
+          // New webhook format fields
+          alarmSummary: readableAlarmSummary, // Use parsed alarm summary
+          shape: alert.shape,
+          availabilityDomain: alert.availabilityDomain,
+          faultDomain: alert.faultDomain,
+          instancePoolId: alert.instancePoolId,
+          // Status and timestamp fields
+          status: alert.status,
+          timestampEpochMillis: alert.timestampEpochMillis
+        };
+
+        processedAlerts.push(processedAlert);
+        // Added Infrastructure alert
       }
-      if (alert.metricValues && Object.keys(alert.metricValues).length > 0) {
-        console.log(`🔍 [FRONTEND DEBUG] Found metricValues:`, alert.metricValues, `for alert ${alert._id || alert.timestamp}`);
-      }
-
-      const processedAlert = {
-        id: alert._id || `oci-${alert.timestamp}-${index}`, // Ensure unique IDs
-        source, // ✅ MUST be 'Infrastructure Alerts'
-        severity,
-        title: alertTitle,
-        description: alert.alarmSummary || 'Infrastructure alert from OCI monitoring system',
-        timestamp: alert.timestamp,
-        site: alert.vm,
-        category: category,
-        region: alert.region,
-        compartment: alert.compartment,
-        metricName: alert.metricName,
-        tenant: alert.tenant,
-        resourceType: resourceType,
-        resourceDisplayName: alert.resourceDisplayName,
-        metricValues: alert.metricValues,
-        query: alert.query,
-        // New webhook format fields
-        alarmSummary: alert.alarmSummary,
-        shape: alert.shape,
-        availabilityDomain: alert.availabilityDomain,
-        faultDomain: alert.faultDomain,
-        instancePoolId: alert.instancePoolId,
-        // Status and timestamp fields
-        status: alert.status,
-        timestampEpochMillis: alert.timestampEpochMillis
-      };
-
-      processedAlerts.push(processedAlert);
-      // Added Infrastructure alert
     });
   } else if (shouldProcessOCI) {
     // Should process OCI but no alerts provided
@@ -417,6 +626,8 @@ export const processAlerts = (
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
 
+  // 🔍 DETAILED LOGGING: Final Result
+  
   // Final result processed
   return sortedAlerts;
 };

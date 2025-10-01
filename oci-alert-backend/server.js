@@ -108,12 +108,9 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 CORS Origins: ${process.env.CORS_ORIGIN || '*'}`);
-  const baseUrl = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging' 
-    ? 'https://transitdemo.qryde.net' 
-    : `http://localhost:${PORT}`;
-  console.log(`📡 Webhook endpoint: ${baseUrl}/webhook/oci-alerts`);
-  console.log(`🔌 SSE endpoint: ${baseUrl}/webhook/stream`);
-  console.log(`❤️  Health check: ${baseUrl}/health`);
+  console.log(`📡 Webhook endpoint: /webhook/oci-alerts`);
+  console.log(`🔌 SSE endpoint: /webhook/stream`);
+  console.log(`❤️  Health check: /health`);
 });
 
 // Password validation function

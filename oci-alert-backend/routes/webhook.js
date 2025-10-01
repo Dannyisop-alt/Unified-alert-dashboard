@@ -38,7 +38,6 @@ function updateExistingAlert(dedupeKey, newAlertData) {
       dedupeKey: dedupeKey, // Ensure dedupeKey is preserved
       lastUpdated: new Date().toISOString()
     };
-    console.log(`🔄 [DEDUPE] Updated existing alert for dedupeKey: ${dedupeKey}`);
     return true;
   }
   return false;
@@ -64,7 +63,6 @@ function addNewAlert(alertData) {
     }
   }
   
-  console.log(`✅ [DEDUPE] Added new alert for dedupeKey: ${alertData.dedupeKey}`);
 }
 
 // 📝 LOGGING FUNCTIONS
@@ -104,7 +102,6 @@ function determineAlertType(webhookData) {
     }
     
     // Default to server if unable to determine
-    console.log('⚠️ [LOGS] Unable to determine alert type, defaulting to server');
     return 'server';
   } catch (error) {
     console.error('❌ [LOGS] Error determining alert type:', error);
@@ -129,7 +126,6 @@ function logRawAlert(rawPayload, alertType) {
     const logLine = JSON.stringify(logEntry) + '\n';
     fs.appendFileSync(logFilePath, logLine);
     
-    console.log(`📝 [LOGS] Raw alert logged to: ${logFileName} (type: ${alertType})`);
   } catch (error) {
     console.error('❌ [LOGS] Error writing to log file:', error);
   }
@@ -145,7 +141,7 @@ cron.schedule('5 0 * * *', () => {
   dedupeKeys.clear(); // Clear dedupe tracking
   alertDedupeMap.clear(); // Clear dedupe mapping
   const resetTime = new Date().toISOString();
-  console.log(`🧹 [CRON] OCI Alert Memory Reset: Cleared ${beforeCount} alerts, ${rawWebhookCount} raw webhooks, and ${dedupeCount} dedupe keys at ${resetTime}`);
+  console.log(`🧹 [CRON] Memory reset: ${beforeCount} alerts, ${rawWebhookCount} webhooks, ${dedupeCount} dedupe keys`);
 }, {
   timezone: "America/New_York" // Same timezone as application logs
 });
@@ -167,7 +163,7 @@ cron.schedule('0 */6 * * *', () => {
   }
   
   if (cleanedCount > 0) {
-    console.log(`🧹 [CLEANUP] Cleaned up ${cleanedCount} old dedupe keys. Remaining: ${dedupeKeys.size}`);
+    console.log(`🧹 [CLEANUP] Cleaned ${cleanedCount} old dedupe keys`);
   }
 }, {
   timezone: "America/New_York"
@@ -176,20 +172,13 @@ cron.schedule('0 */6 * * *', () => {
 // Webhook endpoint to receive OCI alerts and broadcast to frontend
 router.post('/oci-alerts', async (req, res) => {
   try {
-    console.log('-----------------------------');
     console.log(`🟢 [${new Date().toISOString()}] POST /webhook/oci-alerts`);
-    console.log('📥 Headers:', req.headers);
-    console.log('📦 Body:', JSON.stringify(req.body, null, 2));
     
     const webhookData = req.body;
     
     // 🔔 HANDLE OCI SUBSCRIPTION CONFIRMATION (MANUAL METHOD)
     if (webhookData.type === 'SubscriptionConfirmation') {
-      console.log('📧 [SUBSCRIPTION] Received OCI subscription confirmation request');
-      console.log('📧 [SUBSCRIPTION] Message:', webhookData.message);
-      console.log('📧 [SUBSCRIPTION] Topic ID:', webhookData.topicId);
-      console.log('📧 [SUBSCRIPTION] Confirmation URL:', webhookData.confirmationUrl);
-      console.log('📧 [SUBSCRIPTION] Please manually visit the confirmation URL to complete subscription');
+      console.log('📧 [SUBSCRIPTION] Received confirmation request');
       
       // Store the confirmation request for manual processing
       const confirmationLog = {
@@ -234,17 +223,20 @@ router.post('/oci-alerts', async (req, res) => {
       rawWebhookMemory.splice(MAX_RAW_WEBHOOKS);
     }
     
+    // Process OCI Alert
+    
     // Ultra-flexible webhook data structure - accept ANY JSON format
     let payload;
     
     if (webhookData.payload) {
       // Wrapped format: { payload: { ... } }
       payload = webhookData.payload;
-      console.log('📦 [WEBHOOK] Using wrapped payload format');
+    } else if (webhookData.rawPayload) {
+      // New OCI webhook format: { rawPayload: { ... } }
+      payload = webhookData.rawPayload;
     } else {
       // Direct format - accept ANY structure
       payload = webhookData;
-      console.log('📦 [WEBHOOK] Using direct payload format - flexible parsing');
     }
     
     // Ultra-flexible field extraction - try multiple possible field names
@@ -257,65 +249,102 @@ router.post('/oci-alerts', async (req, res) => {
       return defaultValue;
     };
 
-    // Extract all possible fields with multiple name variations
-    const title = extractField(payload, ['title', 'message', 'alertTitle', 'name', 'subject'], 'No title available');
-    const severity = extractField(payload, ['severity', 'level', 'priority', 'alertLevel'], 'warning').toLowerCase();
-    const vm = extractField(payload, ['vm', 'resourceDisplayName', 'hostname', 'instanceName', 'serverName'], 'Unknown VM');
-    const region = extractField(payload, ['region', 'location', 'zone', 'availabilityZone'], 'Unknown region');
-    const status = extractField(payload, ['status', 'state', 'condition'], 'UNKNOWN');
-    const query = extractField(payload, ['query', 'metricQuery', 'expression', 'rule'], '');
-    const timestampEpochMillis = extractField(payload, ['timestampEpochMillis', 'timestamp', 'time', 'createdAt', 'lastUpdated'], null);
-    
-    // Extract dimensions/resource info
-    const dimensions = {
-      resourceDisplayName: extractField(payload, ['resourceDisplayName', 'vm', 'hostname', 'instanceName'], 'Unknown VM'),
-      resourceId: extractField(payload, ['resourceId', 'instanceId', 'id'], ''),
-      imageId: extractField(payload, ['imageId', 'image'], ''),
-      shape: extractField(payload, ['shape', 'instanceType', 'size'], ''),
-      availabilityDomain: extractField(payload, ['availabilityDomain', 'zone', 'az'], ''),
-      faultDomain: extractField(payload, ['faultDomain', 'fd'], ''),
-      instancePoolId: extractField(payload, ['instancePoolId', 'poolId'], ''),
-      region: extractField(payload, ['region', 'location'], 'Unknown region')
-    };
+    // Check if this is the new OCI webhook format
+    let alertData;
+    if (payload.alarmMetaData && Array.isArray(payload.alarmMetaData) && payload.alarmMetaData.length > 0) {
+      // New OCI webhook format processing
+      const alarmMeta = payload.alarmMetaData[0]; // Use first alarm metadata
+      const dimensions = alarmMeta.dimensions && alarmMeta.dimensions[0] ? alarmMeta.dimensions[0] : {};
+      
+      alertData = {
+        id: payload.dedupeKey || `webhook-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        severity: payload.severity ? payload.severity.toLowerCase() : 'warning',
+        message: payload.title || 'No title available',
+        vm: dimensions.resourceDisplayName || dimensions.resourceName || dimensions.hostName || 'Unknown VM',
+        tenant: 'N/A', // Not available in new format
+        region: dimensions.region || 'Unknown region',
+        compartment: 'N/A', // Not available in new format
+        alertType: payload.type || 'REPEAT',
+        metricName: '', // Will be extracted from query
+        threshold: 0, // Not directly available
+        currentValue: 0, // Not directly available
+        unit: '%', // Default unit
+        resourceDisplayName: dimensions.resourceDisplayName || dimensions.resourceName || dimensions.hostName || 'Unknown VM',
+        metricValues: alarmMeta.metricValues || [],
+        query: alarmMeta.query || '',
+        timestamp: payload.timestamp || new Date().toISOString(),
+        webhookReceivedAt: new Date().toISOString(),
+        alarmSummary: alarmMeta.alarmSummary || '',
+        title: payload.title || 'No title available',
+        dedupeKey: payload.dedupeKey || '',
+        alarmOCID: alarmMeta.id || '',
+        resourceId: dimensions.resourceId || '',
+        imageId: dimensions.imageId || '',
+        shape: dimensions.shape || '',
+        availabilityDomain: dimensions.availabilityDomain || '',
+        faultDomain: dimensions.faultDomain || '',
+        instancePoolId: dimensions.instancePoolId || '',
+        status: alarmMeta.status || 'UNKNOWN',
+        timestampEpochMillis: payload.timestampEpochMillis || null,
+        // Store the complete raw webhook data for frontend processing
+        rawPayload: webhookData
+      };
+    } else {
+      // Legacy webhook format processing
+      const title = extractField(payload, ['title', 'message', 'alertTitle', 'name', 'subject'], 'No title available');
+      const severity = extractField(payload, ['severity', 'level', 'priority', 'alertLevel'], 'warning').toLowerCase();
+      const vm = extractField(payload, ['vm', 'resourceDisplayName', 'hostname', 'instanceName', 'serverName'], 'Unknown VM');
+      const region = extractField(payload, ['region', 'location', 'zone', 'availabilityZone'], 'Unknown region');
+      const status = extractField(payload, ['status', 'state', 'condition'], 'UNKNOWN');
+      const query = extractField(payload, ['query', 'metricQuery', 'expression', 'rule'], '');
+      const timestampEpochMillis = extractField(payload, ['timestampEpochMillis', 'timestamp', 'time', 'createdAt', 'lastUpdated'], null);
+      
+      // Extract dimensions/resource info
+      const dimensions = {
+        resourceDisplayName: extractField(payload, ['resourceDisplayName', 'vm', 'hostname', 'instanceName'], 'Unknown VM'),
+        resourceId: extractField(payload, ['resourceId', 'instanceId', 'id'], ''),
+        imageId: extractField(payload, ['imageId', 'image'], ''),
+        shape: extractField(payload, ['shape', 'instanceType', 'size'], ''),
+        availabilityDomain: extractField(payload, ['availabilityDomain', 'zone', 'az'], ''),
+        faultDomain: extractField(payload, ['faultDomain', 'fd'], ''),
+        instancePoolId: extractField(payload, ['instancePoolId', 'poolId'], ''),
+        region: extractField(payload, ['region', 'location'], 'Unknown region')
+      };
 
-    console.log('🔍 [WEBHOOK] Extracted fields:', {
-      title, severity, vm, region, status, query,
-      hasTimestamp: !!timestampEpochMillis
-    });
-    
-    const alertData = {
-      id: extractField(payload, ['id', 'alarmOCID', 'alarmId', 'alertId'], `webhook-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
-      severity: severity,
-      message: title,
-      vm: vm,
-      tenant: extractField(payload, ['tenant', 'organization', 'company'], 'N/A'),
-      region: region,
-      compartment: extractField(payload, ['compartment', 'compartmentId', 'orgId'], 'N/A'),
-      alertType: extractField(payload, ['alertType', 'type', 'category'], 'REPEAT'),
-      metricName: extractField(payload, ['metricName', 'metric', 'measurement'], ''),
-      threshold: extractField(payload, ['threshold', 'limit', 'maxValue'], 0),
-      currentValue: extractField(payload, ['currentValue', 'value', 'metricValue'], 0),
-      unit: extractField(payload, ['unit', 'measurementUnit'], '%'),
-      resourceDisplayName: vm,
-      metricValues: extractField(payload, ['metricValues', 'metrics', 'data'], {}),
-      query: query,
-      timestamp: extractField(payload, ['timestamp', 'time', 'createdAt'], new Date().toISOString()),
-      webhookReceivedAt: extractField(payload, ['webhookReceivedAt', 'receivedAt', 'lastUpdated'], new Date().toISOString()),
-      // Additional fields for new format
-      alarmSummary: extractField(payload, ['alarmSummary', 'summary', 'description'], ''),
-      title: title,
-      dedupeKey: extractField(payload, ['dedupeKey', 'deduplicationKey', 'uniqueId'], `webhook-${Date.now()}`),
-      alarmOCID: extractField(payload, ['alarmOCID', 'alarmId', 'id'], ''),
-      resourceId: dimensions.resourceId,
-      imageId: dimensions.imageId,
-      shape: dimensions.shape,
-      availabilityDomain: dimensions.availabilityDomain,
-      faultDomain: dimensions.faultDomain,
-      instancePoolId: dimensions.instancePoolId,
-      // New fields for status and timestamp display
-      status: status,
-      timestampEpochMillis: timestampEpochMillis
-    };
+      alertData = {
+        id: extractField(payload, ['id', 'alarmOCID', 'alarmId', 'alertId'], `webhook-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
+        severity: severity,
+        message: title,
+        vm: vm,
+        tenant: extractField(payload, ['tenant', 'organization', 'company'], 'N/A'),
+        region: region,
+        compartment: extractField(payload, ['compartment', 'compartmentId', 'orgId'], 'N/A'),
+        alertType: extractField(payload, ['alertType', 'type', 'category'], 'REPEAT'),
+        metricName: extractField(payload, ['metricName', 'metric', 'measurement'], ''),
+        threshold: extractField(payload, ['threshold', 'limit', 'maxValue'], 0),
+        currentValue: extractField(payload, ['currentValue', 'value', 'metricValue'], 0),
+        unit: extractField(payload, ['unit', 'measurementUnit'], '%'),
+        resourceDisplayName: vm,
+        metricValues: extractField(payload, ['metricValues', 'metrics', 'data'], {}),
+        query: query,
+        timestamp: extractField(payload, ['timestamp', 'time', 'createdAt'], new Date().toISOString()),
+        webhookReceivedAt: extractField(payload, ['webhookReceivedAt', 'receivedAt', 'lastUpdated'], new Date().toISOString()),
+        // Additional fields for new format
+        alarmSummary: extractField(payload, ['alarmSummary', 'summary', 'description'], ''),
+        title: title,
+        dedupeKey: extractField(payload, ['dedupeKey', 'deduplicationKey', 'uniqueId'], `webhook-${Date.now()}`),
+        alarmOCID: extractField(payload, ['alarmOCID', 'alarmId', 'id'], ''),
+        resourceId: dimensions.resourceId,
+        imageId: dimensions.imageId,
+        shape: dimensions.shape,
+        availabilityDomain: dimensions.availabilityDomain,
+        faultDomain: dimensions.faultDomain,
+        instancePoolId: dimensions.instancePoolId,
+        // New fields for status and timestamp display
+        status: status,
+        timestampEpochMillis: timestampEpochMillis
+      };
+    }
 
     // Check for duplicates using dedupeKey
     const dedupeKey = alertData.dedupeKey;
@@ -332,18 +361,9 @@ router.post('/oci-alerts', async (req, res) => {
       addNewAlert(alertData);
     }
     
-    console.log(`✅ [WEBHOOK] Alert ${action} in memory:`, {
-      id: alertData.id,
-      message: alertData.message,
-      severity: alertData.severity,
-      vm: alertData.vm,
-      tenant: alertData.tenant,
-      dedupeKey: dedupeKey,
-      isDuplicate: isDuplicate,
-      totalAlerts: alertMemory.length,
-      uniqueAlerts: dedupeKeys.size,
-      memoryUsage: `${alertMemory.length}/${MAX_ALERTS} (${((alertMemory.length / MAX_ALERTS) * 100).toFixed(1)}%)`
-    });
+    
+    console.log(`✅ [OCI-ALERT] Alert ${action}: ${alertData.id} (${alertData.severity})`);
+    
 
     res.status(200).json({ 
       message: `Alert ${action} successfully`,
@@ -363,7 +383,7 @@ router.post('/oci-alerts', async (req, res) => {
 // Get all alerts from memory
 router.get('/alerts', (req, res) => {
   try {
-    console.log(`📋 [MEMORY] Fetching ${alertMemory.length} alerts from memory`);
+    console.log(`🌐 [FRONTEND] Requesting alerts (${alertMemory.length} total)`);
     
     // Apply filters from query parameters
     const { 
@@ -412,7 +432,8 @@ router.get('/alerts', (req, res) => {
       filteredAlerts = filteredAlerts.slice(0, parseInt(limit));
     }
     
-    console.log(`✅ [MEMORY] Returning ${filteredAlerts.length} filtered alerts`);
+    console.log(`📤 [FRONTEND] Sending ${filteredAlerts.length} filtered alerts`);
+    
     res.json(filteredAlerts);
     
   } catch (error) {
@@ -478,7 +499,7 @@ router.delete('/alerts', (req, res) => {
   try {
     const clearedCount = alertMemory.length;
     alertMemory.length = 0; // Clear the array
-    console.log(`🧹 [MANUAL] OCI Alert Memory Reset: Cleared ${clearedCount} alerts`);
+    console.log(`🧹 [MANUAL] Cleared ${clearedCount} alerts`);
     res.json({ 
       message: `Cleared ${clearedCount} alerts from memory`,
       clearedCount,
@@ -530,7 +551,6 @@ router.get('/logs/download/:filename', (req, res) => {
       return res.status(404).json({ error: 'Log file not found' });
     }
     
-    console.log(`📥 [LOGS] Downloading log file: ${filename}`);
     res.download(filePath, filename);
   } catch (error) {
     console.error('❌ [LOGS] Error downloading log file:', error);
